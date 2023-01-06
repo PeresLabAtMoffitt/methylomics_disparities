@@ -19,6 +19,7 @@ Alu.hg38.demo <- Alu.hg38.demo
 # 1. Groomm ethylation data
 # Get GM12878 methylation data (450k array)
 GM12878_450k <- getGM12878('450k')
+GM12878_450k@assays@data@listData
 GM12878_450k <- grooMethy(GM12878_450k)
 GM12878_450k
 
