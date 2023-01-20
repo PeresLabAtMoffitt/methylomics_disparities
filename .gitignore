@@ -17,6 +17,7 @@
 *.xlsx
 *.docx
 *.rds
+*.rda
 *.pptx
 
 # Example code in progress
