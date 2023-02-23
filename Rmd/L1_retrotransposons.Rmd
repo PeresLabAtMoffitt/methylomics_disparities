@@ -108,7 +108,7 @@ citation("REMP")
 
 
 ```{r}
-# groomed_data <- read_rds(paste0(here::here(), "/groomed_data.rds"))
+# groomed_data <- read_rds(paste0(here::here(), "/intermediary data/groomed_data.rds"))
 ```
 
 <!-- The data is now imputed. -->
@@ -152,19 +152,19 @@ citation("REMP")
 #                  parcel = remparcel_Alu, ncore = 4, seed = 1234,
 #                  work.dir = here::here())
 # write_rds(remp_res_Alu, "remp_res_Alu.rds")
-remp_res_Alu <- read_rds(paste0(here::here(), "/remp_res_Alu.rds"))
+remp_res_Alu <- read_rds(paste0(here::here(), "/intermediary data/remp_res_Alu.rds"))
 # remp_res_L1 <- remp(groomed_data,
 #                  REtype = 'L1',
 #                  parcel = remparcel_L1, ncore = 4, seed = 1234,
 #                  work.dir = here::here())
 # write_rds(remp_res_L1, "remp_res_L1.rds")
-remp_res_L1 <- read_rds(paste0(here::here(), "/remp_res_L1.rds"))
+remp_res_L1 <- read_rds(paste0(here::here(), "/intermediary data/remp_res_L1.rds"))
 # remp_res_ERV <- remp(groomed_data,
 #                  REtype = 'ERV',
 #                  parcel = remparcel_ERV, ncore = 4, seed = 1234,
 #                  work.dir = here::here())
 # write_rds(remp_res_ERV, "remp_res_ERV.rds")
-remp_res_ERV <- read_rds(paste0(here::here(), "/remp_res_ERV.rds"))
+remp_res_ERV <- read_rds(paste0(here::here(), "/intermediary data/remp_res_ERV.rds"))
 ```
 
 ## Explore results
@@ -291,7 +291,7 @@ Heatmap(df_map1, name = " ",
 # (Optional) Aggregate the predicted methylation of CpGs in RE by averaging them to obtain the RE-specific methylation level:
 # remp_res_L1 <- rempAggregate(remp_res_L1, NCpG = 2, ncore = 4)
 # write_rds(remp_res_L1, "remp_res_L1_aggregate.rds")
-remp_res_L1 <- read_rds(paste0(here::here(), "/remp_res_L1_aggregate.rds"))
+remp_res_L1 <- read_rds(paste0(here::here(), "/intermediary data/remp_res_L1_aggregate.rds"))
 details(remp_res_L1)
 # Aggregating CpGs in the same RE for RE-level methylation data is beneficial because 1) it greatly reduces the
 # data dimension for downstream analysis and 2) it may produce more robust RE methylation estimation. Note that
@@ -325,8 +325,7 @@ Heatmap(df_map1, name = " ",
 # By default gene symbol annotation will be added
 # remp_res_L1 <- decodeAnnot(remp_res_L1)
 # write_rds(remp_res_L1, "remp_res_L1_annotation.rds")
-remp_res_L1 <- read_rds(paste0(here::here(), "/remp_res_L1_annotation.rds"))
-rempAnnot(remp_res_L1)
+remp_res_L1 <- read_rds(paste0(here::here(), "/intermediary data/remp_res_L1_annotation.rds"))
 
 # 4. Plot prediction
 remplot(remp_res_L1, main = "L1 methylation", col = "blue")
@@ -356,33 +355,56 @@ Heatmap(df_map1, name = " ",
 ```{r quick loop to join Bvalue gene chr info, class.source = 'fold-show'}
 # Need to bind L1 with chr and symol
 # Data results with the B value and RE.Index
+# L1_beta_results <-
+#   annot_L1_beta_results %>%
+#   # Merge with annotation, get #chr, start, end
+#   left_join(., as_tibble(remp_res_L1@metadata$REannotation), by = c("Index" = "Index"))
+
+# # Merge with refgene, get gene symbol
+# chr_vec <- paste0("chr", c(seq(1, 22, 1)))
+# data <- data.frame(matrix(nrow=0, ncol=0))
+# # data <- data.frame(matrix(nrow=1, ncol=0))
+# for (i in chr_vec){
+# 
+#   data_chr <- L1_beta_results %>%
+#   filter(seqnames == i) %>%
+#   # Merge with refgene, get gene symbol
+#   left_join(., as_tibble(remp_res_L1@metadata$refGene), by = c("seqnames", "strand"), suffix = c("_RE", "_gene")) %>%
+#     # select RE position within the gene
+#   mutate(correct_position = case_when(
+#     start_RE > start_gene &
+#       end_RE < end_gene         ~ "correct"
+#   )) %>%
+#   filter(correct_position == "correct") %>% 
+#     select(-correct_position)
+# 
+#   data <- bind_rows(data, data_chr)
+# 
+# }
+# L1_beta_results <- data
+# rm(chr_vec, n, i, data, data_chr)
+
+# annotated_L1 <- rempAnnot(remp_res_L1)
+# annotated_L1_ <- annotated_L1 %>% as_tibble()
+
 L1_beta_results <-
   annot_L1_beta_results %>%
   # Merge with annotation, get #chr, start, end
-  left_join(., as_tibble(remp_res_L1@metadata$REannotation), by = c("Index" = "Index"))
+  left_join(., as_tibble(rempAnnot(remp_res_L1)), by = "Index")
+  
+L1_beta_results <- L1_beta_results %>% 
+  mutate(symbol = coalesce(InNM.symbol, InNR.symbol, InTSS.symbol, 
+                           In5UTR.symbol, InCDS.symbol, InExon.symbol, 
+                           In3UTR.symbol)) 
 
-# Merge with refgene, get gene symbol
-chr_vec <- paste0("chr", c(seq(1, 22, 1)))
-data <- data.frame(matrix(nrow=0, ncol=0))
-# data <- data.frame(matrix(nrow=1, ncol=0))
-for (i in chr_vec){
+L1_beta_results_ <- L1_beta_results %>% 
+  unite(Index, c(Index, seqnames:repName, symbol), sep = "; ") %>% 
+  column_to_rownames("Index") %>% 
+  select(starts_with("X")) %>% 
+  t() %>% as_tibble(rownames = "patient_id")
 
-  data_chr <- L1_beta_results %>%
-  filter(seqnames == i) %>%
-  # Merge with refgene, get gene symbol
-  left_join(., as_tibble(remp_res_L1@metadata$refGene), by = c("seqnames", "strand"), suffix = c("_RE", "_gene")) %>%
-    # select RE position within the gene
-  mutate(correct_position = case_when(
-    start_RE > start_gene &
-      end_RE < end_gene         ~ "correct"
-  )) %>%
-  filter(correct_position == "correct")
 
-  data <- bind_rows(data, data_chr)
-
-}
-L1_beta_results <- data
-rm(chr_vec, n, i, data, data_chr)
+write_rds(L1_beta_results_, "intermediary data/L1_beta_results.rds")
 ```
 
 # VIII. Results analysis
@@ -391,7 +413,7 @@ Sorry for the long table!
 ```{r, echo = FALSE}
 L1_beta_results %>%
   mutate(seqnames = factor(seqnames)) %>%
-  select(seqnames, GeneSymbol) %>%
+  select(seqnames, symbol) %>%
   tbl_summary()
 ```
 
