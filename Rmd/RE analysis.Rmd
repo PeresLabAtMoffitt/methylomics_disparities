@@ -1,0 +1,400 @@
+---
+title: "Retrotransposons analysis"
+author: "Christelle Colin-Leitzinger"
+date: '`r Sys.Date()`'
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: false
+    theme: united
+    highlight: pygments
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+
+.figure {
+   margin-top: 25px;
+   margin-bottom: 100px;
+}
+
+table {
+    margin-top: 10px;
+    margin-bottom: 25px;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+                      warning = FALSE,
+                      message = FALSE,
+                      cache = FALSE,
+                      fig.align='center'
+                      )
+```
+
+```{r library, echo = FALSE}
+library(tidyverse)
+# library(REMP)
+library(ComplexHeatmap)
+library(gtsummary)
+library(survival)
+library(survminer)
+theme_gtsummary_compact()
+theme_set(theme_classic())
+```
+
+<style>
+div.darkblue { background-color:#0099CC; border-radius: 5px; padding: 20px; font-size: 38px}
+</style>
+<div class = "blue">
+
+<span style="color: white;">Retrotransposons analysis in AACES and NCOCS data</span>
+
+</div>
+<br>
+
+```{r load}
+load(paste0(here::here(), "/cleaned_07082022.rda"))
+final_RE <- read_rds("~/Documents/GitHub/Peres/methylomics_disparities/final_RE.rds")
+Alu_beta_results <- read_rds(paste0(here::here(), "/intermediary data/Alu_beta_results.rds")) %>% 
+  mutate(patient_id = str_remove(patient_id, "X"))
+L1_beta_results <- read_rds(paste0(here::here(), "/intermediary data/L1_beta_results.rds")) %>% 
+  mutate(patient_id = str_remove(patient_id, "X"))
+ERV_beta_results <- read_rds(paste0(here::here(), "/intermediary data/ERV_beta_results.rds")) %>% 
+  mutate(patient_id = str_remove(patient_id, "X"))
+
+
+```
+
+
+```{r cleaning}
+phenoclean <- phenoclean %>%
+  select(-c(starts_with("chr"))) %>%
+  remove_rownames() %>%
+  mutate(suid = Sample_Name) %>%
+  select(patient_id = Complete.Barcode, suid, everything(), -c(Sample_Name, roi_num : Basename))
+
+phenoclean <- phenoclean %>%
+  mutate(bmi_cat = case_when(
+    BMI_recent < 25                                         ~ "<25",
+    BMI_recent >= 25 &
+      BMI_recent < 30                                       ~ "25-29",
+    BMI_recent >= 30 &
+      BMI_recent < 35                                       ~ "30-34",
+    BMI_recent >= 35                                        ~ "≥35"
+  ), bmi_cat =
+    factor(bmi_cat, levels = c("<25", "25-29", "30-34", "≥35"))) %>%
+  mutate(os_event = case_when(
+    vitalstatus == 1                ~ 0,
+    vitalstatus == 2                ~ 1
+  )) %>% 
+  rename(os_time = timelastfu)
+
+final_RE <- final_RE %>%  
+  rename(cluster_Alu = Alu_cluster, cluster_L1 = L1_cluster, cluster_ERV = ERV_cluster) %>%
+  # rename(Alu_cluster = "cluster_Alu", L1_cluster = "cluster_L1", ERV_cluster = "cluster_ERV") %>% 
+  mutate(patient_id = str_remove(patient_id, "X")) %>% 
+  mutate(across(starts_with("cluster"), ~as.factor(.)))
+```
+
+
+```{r prep data}
+met_data <- phenoclean %>% 
+  full_join(., final_RE,
+            by = "patient_id")
+
+L1_beta_results <- L1_beta_results %>% 
+  full_join(., Alu_beta_results,
+            by = "patient_id") %>% 
+  full_join(., ERV_beta_results,
+            by = "patient_id") %>% 
+  full_join(., final_RE,
+            by = "patient_id") %>% 
+  mutate(patient_id = str_remove(patient_id, "X"))
+```
+
+# I. ICC (would be on values before aggregating but not sure we should do it)
+```{r}
+
+```
+
+
+# Table 1. Patient characteristics overall and by cluster_L1/ethnicity
+```{r}
+met_data %>% 
+  select(refage, karyotype,
+         stage, histology, grade,
+         BMI_recent, bmi_cat,
+        smokcurrent,
+         debulking_CA125, neoadjuvant, adjuvant,
+         ) %>% 
+  tbl_summary(
+              statistic = list(all_continuous() ~ "{mean} ({sd})"),
+              label = list(refage ~ "Age at diagnosis",
+                           debulking_CA125 ~ "Debulking Status", 
+                           neoadjuvant ~ "Neoadjuvant chemotherapy",
+                           adjuvant ~ "Adjuvant chemotherapy",
+                           smokcurrent ~ "Current smoking status"
+                           ),
+              type = list(c(neoadjuvant, adjuvant) ~ "categorical"),
+              digits = list(all_continuous() ~ 1)) %>%
+      modify_header(list(label ~ "**Patient characteristics**", all_stat_cols() ~ "**{level}**, N = {n}"))
+```
+
+# II. Distribution RE
+```{r}
+Alu_beta_results %>% 
+  select(patient_id, starts_with("cluster")) %>% 
+  pivot_longer(cols = -patient_id) %>% 
+  ggplot(aes(x= as.character(value), fill= name))+
+  geom_bar()+
+  labs(x="Cell type", y=NULL, title="RE cluster")+
+  facet_wrap(.~name)
+L1_beta_results %>% 
+  select(patient_id, starts_with("cluster")) %>% 
+  pivot_longer(cols = -patient_id) %>% 
+  ggplot(aes(x= as.character(value), fill= name))+
+  geom_bar()+
+  labs(x="Cell type", y=NULL, title="RE cluster")+
+  facet_wrap(.~name)
+ERV_beta_results %>% 
+  select(patient_id, starts_with("cluster")) %>% 
+  pivot_longer(cols = -patient_id) %>% 
+  ggplot(aes(x= as.character(value), fill= name))+
+  geom_bar()+
+  labs(x="Cell type", y=NULL, title="RE cluster")+
+  facet_wrap(.~name)
+```
+
+# III. Table 2. Distribution of RE and clusters (too many variables, How to get few representatives)
+```{r}
+# tbl1 <-
+#   L1_beta_results %>% slice(1:100) %>%
+#   select(starts_with("L1"),
+#          cluster_Alu) %>%
+#   group_by(cluster_Alu) %>% #slice_sample(n=5)
+#   tbl_summary(by = cluster_Alu,
+#               statistic = list(all_continuous() ~ "{mean} ({sd})"),
+#               missing = "no", digits = list(all_continuous() ~ 2)) %>%
+#   add_overall() %>% bold_labels() %>% add_p() %>% bold_p(t = .05) %>% add_q()
+# tbl2 <-
+#   L1_beta_results %>% slice(1:100) %>%
+#   select(starts_with("L1"),
+#          cluster_L1) %>%
+#   tbl_summary(by = cluster_L1,
+#               statistic = list(all_continuous() ~ "{mean} ({sd})"),
+#               missing = "no", digits = list(all_continuous() ~ 2)) %>%
+#   add_overall() %>% bold_labels() %>% add_p() %>% bold_p(t = .05) %>% add_q()
+# tbl3 <-
+#   L1_beta_results %>% slice(1:100) %>%
+#   select(starts_with("L1"),
+#          cluster_ERV) %>%
+#   tbl_summary(by = cluster_ERV,
+#               statistic = list(all_continuous() ~ "{mean} ({sd})"),
+#               missing = "no", digits = list(all_continuous() ~ 2)) %>%
+#   add_overall() %>% bold_labels() %>% add_p() %>% bold_p(t = .05) %>% add_q()
+# 
+# tbl_stack(list(tbl1, tbl2, tbl3), group_header = c("cluster_Alu", "cluster_L1", "cluster_ERV"))
+```
+
+Example of one L1 RE in clusters
+```{r}
+L1_beta_results %>% 
+  ggplot(aes(x= cluster_L1, y = `L1_0000199; chr1; 1041613; 1041983; 371; +; 1159; L1M3; C1orf159`)) + 
+  geom_boxplot(fill = "grey") +
+  labs(x = "L1_0000303", y = "Percent Positivity")
+
+L1_beta_results %>% 
+  group_by(cluster_L1) %>% 
+  # select(patient_id, cluster_Alu, cluster_ERV, cluster_L1, `L1_0000303; chr1; 2060741; 2061103; 363; +; 466; L1MC3; LINE; L1; PRKCZ; NA; NA; PRKCZ; PRKCZ; NA; NA; 1981909; 2116834; 134926; NM_002744; NM; 22; 5590; PRKCZ`,
+  #        `L1_0000382; chr1; 3089083; 3089530; 448; +; 1657; L1MB3; LINE; L1; PRDM16; NA; NA; NA; PRDM16; NA; NA; 2985742; 3355185; 369444; NM_022114; NM; 24; 63976; PRDM16`) %>% 
+  summarise(across(starts_with("L1"), ~mean(., na.rm=TRUE))) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -c(cluster_L1)) %>%
+  ggplot(aes(x= cluster_L1, y = value, group=name, color=name)) + 
+  geom_point()+
+  geom_line()+
+  labs(y= "RE expression")+
+  theme(legend.position = "none")
+
+L1_beta_results %>% 
+  group_by(cluster_L1) %>% 
+  # select(patient_id, cluster_Alu, cluster_ERV, cluster_L1, `L1_0000303; chr1; 2060741; 2061103; 363; +; 466; L1MC3; LINE; L1; PRKCZ; NA; NA; PRKCZ; PRKCZ; NA; NA; 1981909; 2116834; 134926; NM_002744; NM; 22; 5590; PRKCZ`,
+  #        `L1_0000382; chr1; 3089083; 3089530; 448; +; 1657; L1MB3; LINE; L1; PRDM16; NA; NA; NA; PRDM16; NA; NA; 2985742; 3355185; 369444; NM_022114; NM; 24; 63976; PRDM16`) %>%
+    summarise(across(starts_with("L1"), ~mean(., na.rm=TRUE))) %>% 
+  ungroup() %>% 
+
+    pivot_longer(cols = -c(cluster_L1), values_to = "cluster1") %>%
+  group_by(name) %>% 
+  mutate(cluster2 = case_when(
+    cluster_L1 == 2         ~ cluster1
+  )) %>% 
+  fill(cluster2, .direction = "updown") %>% 
+    ungroup() %>% 
+  mutate(cluster2 = case_when(
+    cluster_L1 == 1         ~ cluster1 - cluster2
+  )) %>% 
+  filter(cluster_L1 == 1) %>% 
+  mutate(cluster1 = 1) %>% 
+  mutate(cluster2 = 1- (cluster2 / cluster1)) %>% 
+  pivot_longer(cols = c(cluster1, cluster2),
+               names_to = "names") %>%
+    ggplot(aes(x= names, y = value, group=name, color=name)) + 
+  geom_point()+
+  geom_line()+
+    labs(y= "RE expression diffrence between clusters")+
+  theme(legend.position = "none")
+```
+
+# IV. Heatmap
+```{r}
+map_df1 <- L1_beta_results %>%
+  unite(patient_id, c(patient_id, cluster_L1, cluster_Alu, cluster_ERV), sep = "; c") %>%
+  # select(-c(cluster_Alu, cluster_ERV)) %>% 
+  column_to_rownames("patient_id")
+df_map1 <- t(scale((as.matrix(map_df1)))) # scale for standardizing the data to make variables comparable
+column_ho = HeatmapAnnotation(cluster_Alu = c(L1_beta_results$cluster_Alu),
+                              cluster_L1 = c(L1_beta_results$cluster_L1),
+                              cluster_ERV = c(L1_beta_results$cluster_ERV),
+                              col = list(cluster_Alu = c("1" = "#932667FF", "2" = "grey"),
+                                         cluster_L1 = c("1" = "#932667FF", "2" = "grey"),
+                                         cluster_ERV = c("1" = "#932667FF", "2" = "grey")),
+    na_col = "black")
+Heatmap(df_map1, name = "L1 RE expression", 
+        na_col = "black",
+        show_column_names = FALSE,
+        show_row_names = FALSE,
+        # cluster_rows = FALSE,
+        # cluster_columns = FALSE#,
+        top_annotation = column_ho
+        )
+```
+
+# V. ggridges
+
+
+# VI. Table 3. Adjusted hazard ratios and 95% confidence intervals
+```{r}
+tbl1 <- coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_Alu + refage + stage, 
+              data = met_data)  %>% 
+  tbl_regression(exponentiate = TRUE,
+                 include = cluster_Alu) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+tbl2 <- coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_L1 + refage + stage, 
+              data = met_data) %>%
+  tbl_regression(exponentiate = TRUE,
+                 include = cluster_L1) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+tbl3 <- coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_ERV + refage + stage, 
+              data = met_data) %>%
+  tbl_regression(exponentiate = TRUE,
+                 include = cluster_ERV) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_stack(list(tbl1, tbl2, tbl3))
+
+coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_Alu + cluster_L1 + cluster_ERV + refage + stage, 
+      data = met_data)  %>% 
+  tbl_regression(exponentiate = TRUE) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+```
+PH assumption
+```{r}
+coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_Alu + refage + stage, 
+      data = met_data)  %>% 
+  cox.zph()
+coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_L1 + refage + stage, 
+      data = met_data) %>%
+  cox.zph()
+coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_ERV + refage + stage, 
+      data = met_data) %>%
+  cox.zph()
+
+coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_Alu + cluster_L1 + cluster_ERV + refage + stage, 
+      data = met_data)  %>% 
+  cox.zph()
+```
+
+
+
+# VII. Adjusted hazard ratios and 95% confidence intervals (**Do we need to use all values and use the cluster option?**)
+
+# VIII. Table 4. HR adjusted by debulking status
+```{r}
+tbl1 <- coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_Alu + refage + stage + debulking_CA125, 
+              data = met_data)  %>% 
+  tbl_regression(exponentiate = TRUE,
+                 include = cluster_Alu) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+tbl2 <- coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_L1 + refage + stage + debulking_CA125, 
+              data = met_data) %>%
+  tbl_regression(exponentiate = TRUE,
+                 include = cluster_L1) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+tbl3 <- coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_ERV + refage + stage + debulking_CA125, 
+              data = met_data) %>%
+  tbl_regression(exponentiate = TRUE,
+                 include = cluster_ERV) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_stack(list(tbl1, tbl2, tbl3))
+
+coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_Alu + cluster_L1 + cluster_ERV + refage + stage + debulking_CA125, 
+      data = met_data)  %>% 
+  tbl_regression(exponentiate = TRUE) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+```
+PH assumption
+```{r}
+coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_Alu + refage + stage + debulking_CA125, 
+      data = met_data)  %>% 
+  cox.zph()
+coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_L1 + refage + stage + debulking_CA125, 
+      data = met_data) %>%
+  cox.zph()
+coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_ERV + refage + stage + debulking_CA125, 
+      data = met_data) %>%
+  cox.zph()
+
+coxph(Surv(time = met_data$os_time, 
+                   event = met_data$os_event) ~ cluster_Alu + cluster_L1 + cluster_ERV + refage + stage + debulking_CA125, 
+      data = met_data)  %>% 
+  cox.zph()
+```
+# IX. Supp Table 1. Sensitivity analysis in patients who received adjuvant
+
+# X. Supp Table 2. Sensitivity analysis in patients with serous histology
+
+# KM
+
+
+
+
+
