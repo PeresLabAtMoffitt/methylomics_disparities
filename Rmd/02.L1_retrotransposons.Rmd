@@ -1,5 +1,5 @@
 ---
-title: "Long Terminal Repeat (LTR) (including endogenous retroviruses, ERV) Retrotransposons analysis"
+title: "LINE-1 Retrotransposons analysis"
 author: "Christelle Colin-Leitzinger"
 date: '`r Sys.Date()`'
 output: 
@@ -39,6 +39,7 @@ knitr::opts_chunk$set(
 
 ```{r library, echo = FALSE}
 library(tidyverse)
+library(REMP)
 library(naniar)
 library(ComplexHeatmap)
 library(gtsummary)
@@ -57,7 +58,7 @@ div.darkblue { background-color:#0099CC; border-radius: 5px; padding: 20px; font
 </style>
 <div class = "blue">
 
-<span style="color: white;">LTR Retrotransposons analysis in AACES and NCOCS data</span>
+<span style="color: white;">LINE-1 Retrotransposons analysis in AACES and NCOCS data</span>
 
 </div>
 <br>
@@ -65,125 +66,77 @@ div.darkblue { background-color:#0099CC; border-radius: 5px; padding: 20px; font
 ```{r load}
 load(paste0(here::here(), "/cleaned_07082022.rda"))
 ```
+# I. Exploratory analysis
 
-<!-- # I. Exploratory analysis -->
-<!-- ## Let's take a look at the data -->
-<!-- The clean data was normalized (showing just several patient samples) -->
-<!-- ```{r, echo = FALSE} -->
-<!-- summary(betas_clean6)[,1:9] -->
-<!-- ``` -->
-<!-- Each row should represent CpG probe (601957) and each column should represent sample (202). -->
-<!-- ```{r, echo = FALSE} -->
-<!-- str(betas_clean6) -->
-<!-- ``` -->
-<!-- I assume that the sample name ends by `R0` (red probe) because of a copy paste of previous cleaning.   -->
+<span style="color: red;">Already done in LTR_retrotransposons.Rmd</span>
 
-<!-- Looking a little deeper. -->
-<!-- ```{r} -->
-<!-- betas_clean6 %>% skimr::skim() -->
-<!-- ``` -->
+# II. Imputation with `grooMethy()`
 
-<!-- The data contain missing values (the heatmap below only shows 50 samples for 50 cpg) -->
-<!-- ```{r, echo = FALSE} -->
-<!-- vis_miss(betas_clean6[1:50, 1:50] %>% as_tibble()) -->
-<!-- ``` -->
-<!-- The first step is to impute those missing value using the `grooMethy()` function. -->
-<!-- <span style="color: red;">Is that correct?</span>   -->
-
-<!-- # II. Imputation with `grooMethy()` -->
-
-<!-- <span style="color: purple;">From the intro of REMP pdf:   -->
-<!-- For zero beta values, grooMethy will replace them with smallest non-zero beta value. For one beta values, grooMethy will replace them with largest non-one beta value. For NA/NaN/Inf values, grooMethy will treat them as missing values and then apply KNN-imputation to complete the dataset. If the imputed value is out of the original range (which is possible when imputebyrow = FALSE), mean value will be used instead. Warning: imputed values for multimodal distributed CpGs (across samples) may not be correct. Please check package ENmix to identify the CpGs with multimodal distribution. <span style="color: red;">I think you already eliminated multimodal samples</span> For sequencing data, the users only need to prepare a methylation data matrix (row = CpGs, column = samples). The corresponding CpG location information (either in hg19 or hg38) should be prepared in a separate GRanges object and provide it to the Seq.GR argument in grooMethy.</span>   -->
-<!-- <span style="color: red;">From what I understood, I don't need to furnish the CpG location info. Correct?</span>   -->
-```{r, class.source = 'fold-show'}
-library(REMP)
-citation("REMP")
-# getLocations(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)      # NOT RUN
-# genomic_location_matrix <- getLocations(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)      # NOT RUN
-# groomed_data <- grooMethy(beta_data, Seq.GR = genomic_location_matrix)      # NOT RUN
-
-# groomed_data <- grooMethy(betas_clean6)
-# write_rds(groomed_data, "groomed_data.rds")
-```
-
+<span style="color: red;">Already done in LTR_retrotransposons.Rmd</span>
 
 ```{r}
-# groomed_data <- read_rds(paste0(here::here(), "/groomed_data.rds"))
+groomed_data <- read_rds(paste0(here::here(), "/intermediary data/groomed_data.rds"))
 ```
-
-<!-- The data is now imputed. -->
-<!-- ```{r, echo = FALSE} -->
-<!-- a <- groomed_data@assays@data@listData -->
-<!-- vis_miss(a[["Beta"]][1:50, 1:50] %>% as_tibble()) -->
-<!-- ``` -->
 
 # III. Prepare annotation data
 Need to prepare annotation for each RE type : "Alu", "L1", "ERV" (Human (hg19/hg38) Alu, LINE-1 (L1), and Long Terminal Repeat (LTR) (including endogenous retroviruses, ERV) repetitive element (RE) methylation)
 ```{r, class.source = 'fold-show'}
-library(IlluminaHumanMethylationEPICanno.ilm10b2.hg19)
-citation("IlluminaHumanMethylationEPICanno.ilm10b2.hg19")
-# remparcel_Alu <- initREMP(arrayType = "EPIC", 
-#                       REtype = "Alu", # "L1", "ERV"
-#                       annotation.source = "AH", # "UCSC"
-#                       genome = "hg19", # only option for "AH"
-#                       ncore = 1)
-# remparcel_Alu
-# saveParcel(remparcel_Alu, work.dir = here::here())
-# remparcel_L1 <- initREMP(arrayType = "EPIC", 
+# library(IlluminaHumanMethylationEPICanno.ilm10b2.hg19)
+# citation("IlluminaHumanMethylationEPICanno.ilm10b2.hg19")
+# remparcel_L1 <- initREMP(arrayType = "EPIC",
 #                       REtype = "L1",
-#                       annotation.source = "AH", 
-#                       genome = "hg19", 
+#                       annotation.source = "AH",
+#                       genome = "hg19",
 #                       ncore = 1)
 # remparcel_L1
 # saveParcel(remparcel_L1, work.dir = here::here())
-# remparcel_ERV <- initREMP(arrayType = "EPIC", 
-#                       REtype = "ERV",
-#                       annotation.source = "AH", 
-#                       genome = "hg19", 
-#                       ncore = 1)
-# remparcel_ERV
-# saveParcel(remparcel_ERV, work.dir = here::here())
 ```
 
 # IV. Run prediction
 ```{r, class.source = 'fold-show'}
-# remp_res_Alu <- remp(groomed_data, # Need to use BPPARAM = SnowParam(workers = 2)
-#                  REtype = 'Alu',
-#                  parcel = remparcel_Alu, ncore = 4, seed = 1234,
-#                  work.dir = here::here())
-# write_rds(remp_res_Alu, "remp_res_Alu.rds")
-remp_res_Alu <- read_rds(paste0(here::here(), "/remp_res_Alu.rds"))
 # remp_res_L1 <- remp(groomed_data,
 #                  REtype = 'L1',
 #                  parcel = remparcel_L1, ncore = 4, seed = 1234,
 #                  work.dir = here::here())
-# write_rds(remp_res_L1, "remp_res_L1.rds")
-remp_res_L1 <- read_rds(paste0(here::here(), "/remp_res_L1.rds"))
-# remp_res_ERV <- remp(groomed_data,
-#                  REtype = 'ERV',
-#                  parcel = remparcel_ERV, ncore = 4, seed = 1234,
-#                  work.dir = here::here())
-# write_rds(remp_res_ERV, "remp_res_ERV.rds")
-remp_res_ERV <- read_rds(paste0(here::here(), "/remp_res_ERV.rds"))
+# write_rds(remp_res_L1, "intermediary data/remp_results_L1.rds")
+remp_res_L1 <- read_rds(paste0(here::here(), "/intermediary data/remp_results_L1.rds"))
 ```
 
 ## Explore results
+The data dimension is `r dim(remp_res_L1)`.
 ```{r, class.source = 'fold-show'}
-remp_res_ERV
+remp_res_L1
 # Display more detailed information
-details(remp_res_ERV)
+details(remp_res_L1)
 # Now have 564589 rows
-remp_res_ERV@rowRanges@elementMetadata@nrows
+remp_res_L1@rowRanges@elementMetadata@nrows
 # they are :
-remp_res_ERV@rowRanges@elementMetadata
+remp_res_L1@rowRanges@elementMetadata
+```
 
-remp_res_ERV@metadata
+We have multiple instance for 1 RE type:
+```{r}
+remp_res_L1@rowRanges@elementMetadata %>% as_tibble() %>% 
+  tbl_summary()
+
+remp_res_L1@rowRanges@elementMetadata %>% as_tibble() %>% 
+  group_by(RE.Index) %>%
+  mutate(count = n()) %>%
+  ungroup() %>%
+  distinct() %>%
+  select(count) %>% 
+  tbl_summary(type = list(everything() ~ "categorical"))
+```
+
+## Metadata
+```{r, class.source = 'fold-show'}
+remp_res_L1@metadata
 ```
 
 ## Plot var imp
-What are the variables available?
+What are the important measurement available?
 ```{r, class.source = 'fold-show'}
-var_imp <- remp_res_ERV@metadata[["varImp"]]
+var_imp <- remp_res_L1@metadata[["varImp"]]
 rownames(var_imp)
 ```
 
@@ -214,27 +167,29 @@ var_imp3 %>%
 
 
 ## B value
-Let's take a quick look at the data (used only 200 ERV in the heatmaps - to fit html).
+Let's take a quick look at the data (used only 200 L1 in the heatmaps - to fit html).
 ```{r, class.source = 'fold-show'}
 # Prediction results can be obtained by accessors:
 # Predicted RE-CpG methylation value (Beta value)
-ERV_beta_results <- rempB(remp_res_ERV)
-ERV_beta_results1 <- ERV_beta_results %>% as_tibble() %>%
-  cbind(ERV = remp_res_ERV@rowRanges@elementMetadata$RE.Index, .)
+L1_beta_results <- rempB(remp_res_L1)
+L1_beta_results1 <- L1_beta_results %>% as_tibble() %>%
+  cbind(L1 = remp_res_L1@rowRanges@elementMetadata$RE.Index, .)
 
 ```
+The B value data dimension is still `r dim(L1_beta_results)`.
 
 ```{r, fig.height=12, fig.width=12, echo = FALSE}
-map_df <- ERV_beta_results1[1:200,] %>% group_by(ERV) %>% mutate(type = row_number())
+map_df <- L1_beta_results1[1:200,] %>% group_by(L1) %>% mutate(type = row_number())
 
 map_df1 <- map_df %>%
-  unite(ERV, c(ERV, type)) %>%
-  column_to_rownames("ERV")
+  unite(L1, c(L1, type)) %>%
+  column_to_rownames("L1")
 df_map1 <- t(scale(t(as.matrix(map_df1)))) # scale for standardizing the data to make variables comparable
 # column_ho = HeatmapAnnotation(is_lipids = c(map_df$is_lipids),
 #                               col = list(is_lipids = c("Yes" = "#932667FF", "No" = "grey")),
 #     na_col = "black")
 Heatmap(df_map1, name = " ",
+        na_col = "black"
         # cluster_rows = FALSE,
         # cluster_columns = FALSE#,
         # top_annotation = column_ho
@@ -245,13 +200,13 @@ Heatmap(df_map1, name = " ",
 <!-- <span style="color: red;">Which condition are we working more with M value instead of B value?</span>   -->
 <!-- ```{r, class.source = 'fold-show'} -->
 <!-- #Predicted RE-CpG methylation value (M value) -->
-<!-- rempM(remp_res_ERV) -->
+<!-- rempM(remp_res_L1) -->
 
 <!-- # Genomic location information of the predicted RE-CpG -->
 <!-- # Function inherit from class 'RangedSummarizedExperiment' -->
-<!-- rowRanges(remp_res_ERV) -->
+<!-- rowRanges(remp_res_L1) -->
 <!-- # Standard error-scaled permutation importance of predictors -->
-<!-- rempImp(remp_res_ERV) -->
+<!-- rempImp(remp_res_L1) -->
 <!-- ``` -->
 
 # V. Trimming
@@ -261,19 +216,20 @@ Heatmap(df_map1, name = " ",
 # threshold (default=1.7) will be replaced with NA.
 # CpGs contain more than missing Rate*100% (default=20%)
 # missing rate across samples will be discarded.
-remp_res_ERV <- rempTrim(remp_res_ERV,threshold=1.7,missingRate=0.2)
-details(remp_res_ERV)
-trimmed_ERV_beta_results <- rempB(remp_res_ERV)
+remp_res_L1 <- rempTrim(remp_res_L1,threshold=1.7,missingRate=0.2)
+details(remp_res_L1)
+trimmed_L1_beta_results <- rempB(remp_res_L1)
 ```
+The trimmed B value data has a reduced number of RE. The dimension is now `r dim(trimmed_L1_beta_results)`.
 
 ```{r, fig.height=12, fig.width=12, echo = FALSE}
-trimmed_ERV_beta_results <- trimmed_ERV_beta_results %>% as_tibble() %>%
-  cbind(ERV = remp_res_ERV@rowRanges@elementMetadata$RE.Index, .)
-map_df <- trimmed_ERV_beta_results[1:200,] %>% group_by(ERV) %>% mutate(type = row_number())
+trimmed_L1_beta_results <- trimmed_L1_beta_results %>% as_tibble() %>%
+  cbind(L1 = remp_res_L1@rowRanges@elementMetadata$RE.Index, .)
+map_df <- trimmed_L1_beta_results[1:200,] %>% group_by(L1) %>% mutate(type = row_number())
 
 map_df1 <- map_df %>%
-  unite(ERV, c(ERV, type)) %>%
-  column_to_rownames("ERV")
+  unite(L1, c(L1, type)) %>%
+  column_to_rownames("L1")
 df_map1 <- t(scale(t(as.matrix(map_df1)))) # scale for standardizing the data to make variables comparable
 # column_ho = HeatmapAnnotation(is_lipids = c(map_df$is_lipids),
 #                               col = list(is_lipids = c("Yes" = "#932667FF", "No" = "grey")),
@@ -287,32 +243,35 @@ Heatmap(df_map1, name = " ",
 ```
 
 # VI. Aggregating RE
+Even if optional (per the package vignettes), I think this is a good idea to aggregate values for the same RE.
 ```{r, class.source = 'fold-show'}
 # (Optional) Aggregate the predicted methylation of CpGs in RE by averaging them to obtain the RE-specific methylation level:
-# remp_res_ERV <- rempAggregate(remp_res_ERV, NCpG = 2, ncore = 4)
-# write_rds(remp_res_ERV, "remp_res_ERV_aggregate.rds")
-remp_res_ERV <- read_rds(paste0(here::here(), "/remp_res_ERV_aggregate.rds"))
-details(remp_res_ERV)
+# remp_res_L1 <- rempAggregate(remp_res_L1, NCpG = 2, ncore = 4)
+# write_rds(remp_res_L1, "intermediary data/remp_res_L1_aggregate.rds")
+remp_res_L1 <- read_rds(paste0(here::here(), "/intermediary data/remp_res_L1_aggregate.rds"))
+details(remp_res_L1)
 # Aggregating CpGs in the same RE for RE-level methylation data is beneficial because 1) it greatly reduces the
 # data dimension for downstream analysis and 2) it may produce more robust RE methylation estimation. Note that
 # by default, RE with 2 or more predicted CpG sites will be aggregated. Therefore, the downside of doing this is the
 # reduced coverage of RE. The assumption of doing this is the CpG methylation level within each RE are similar.
-aggr_ERV_beta_results <- rempB(remp_res_ERV)
+aggr_L1_beta_results <- rempB(remp_res_L1)
 ```
+The aggregate B value data has again a reduced number of RE. The dimension is now `r dim(aggr_L1_beta_results)`.
 
 ```{r, fig.height=12, fig.width=12, echo = FALSE}
-aggr_ERV_beta_results <- aggr_ERV_beta_results %>% as_tibble() %>%
-  cbind(ERV = remp_res_ERV@rowRanges@elementMetadata$RE.Index, .)
-map_df <- aggr_ERV_beta_results[1:200,] %>% group_by(ERV) %>% mutate(type = row_number())
+aggr_L1_beta_results <- aggr_L1_beta_results %>% as_tibble() %>%
+  cbind(L1 = remp_res_L1@rowRanges@elementMetadata$RE.Index, .)
+map_df <- aggr_L1_beta_results[1:200,] %>% group_by(L1) %>% mutate(type = row_number())
 
 map_df1 <- map_df %>%
-  unite(ERV, c(ERV, type)) %>%
-  column_to_rownames("ERV")
+  unite(L1, c(L1, type)) %>%
+  column_to_rownames("L1")
 df_map1 <- t(scale(t(as.matrix(map_df1)))) # scale for standardizing the data to make variables comparable
 # column_ho = HeatmapAnnotation(is_lipids = c(map_df$is_lipids),
 #                               col = list(is_lipids = c("Yes" = "#932667FF", "No" = "grey")),
 #     na_col = "black")
 Heatmap(df_map1, name = " ",
+        na_col = "black"
         # cluster_rows = FALSE,
         # cluster_columns = FALSE#,
         # top_annotation = column_ho
@@ -320,24 +279,25 @@ Heatmap(df_map1, name = " ",
 ```
 
 # VII. Annotation
+This step reintroduce some NAs.
 ```{r, class.source = 'fold-show'}
 # To add genomic regions annotation of the predicted REs:
 # By default gene symbol annotation will be added
-# remp_res_ERV <- decodeAnnot(remp_res_ERV, ncore = 4)
-# write_rds(remp_res_ERV, "remp_res_ERV_annotation.rds")
-remp_res_ERV <- read_rds(paste0(here::here(), "/remp_res_ERV_annotation.rds"))
-rempAnnot(remp_res_ERV)
+remp_res_L1 <- decodeAnnot(remp_res_L1)
+# write_rds(remp_res_L1, "intermediary data/remp_res_L1_annotation.rds")
+remp_res_L1 <- read_rds(paste0(here::here(), "/intermediary data/remp_res_L1_annotation.rds"))
 
 # 4. Plot prediction
-remplot(remp_res_ERV, main = "ERV methylation", col = "blue")
+remplot(remp_res_L1, main = "L1 methylation", col = "blue")
 
-annot_ERV_beta_results <- rempB(remp_res_ERV)
+annot_L1_beta_results <- rempB(remp_res_L1)
 ```
+The annotated B value data dimension doesn't change from the previous step : `r dim(annot_L1_beta_results)`.
 
 ```{r, fig.height=12, fig.width=12, echo = FALSE}
-annot_ERV_beta_results <- annot_ERV_beta_results %>% as_tibble() %>%
-  cbind(Index = remp_res_ERV@rowRanges@elementMetadata$RE.Index, .)
-map_df <- annot_ERV_beta_results[1:200,]
+annot_L1_beta_results <- annot_L1_beta_results %>% as_tibble() %>%
+  cbind(Index = remp_res_L1@rowRanges@elementMetadata$RE.Index, .)
+map_df <- annot_L1_beta_results[1:200,]
 
 map_df1 <- map_df %>%
   column_to_rownames("Index")
@@ -353,45 +313,68 @@ Heatmap(df_map1, name = " ",
         )
 ```
 
-```{r quick loop to join Bvalue gene chr info, class.source = 'fold-show'}
-# Need to bind ERV with chr and symol
+```{r quick loop to join Bvalue gene chr info, echo = FALSE}
+# Need to bind L1 with chr and symol
 # Data results with the B value and RE.Index
-ERV_beta_results <-
-  annot_ERV_beta_results %>%
+# L1_beta_results <-
+#   annot_L1_beta_results %>%
+#   # Merge with annotation, get #chr, start, end
+#   left_join(., as_tibble(remp_res_L1@metadata$REannotation), by = c("Index" = "Index"))
+
+# # Merge with refgene, get gene symbol
+# chr_vec <- paste0("chr", c(seq(1, 22, 1)))
+# data <- data.frame(matrix(nrow=0, ncol=0))
+# # data <- data.frame(matrix(nrow=1, ncol=0))
+# for (i in chr_vec){
+# 
+#   data_chr <- L1_beta_results %>%
+#   filter(seqnames == i) %>%
+#   # Merge with refgene, get gene symbol
+#   left_join(., as_tibble(remp_res_L1@metadata$refGene), by = c("seqnames", "strand"), suffix = c("_RE", "_gene")) %>%
+#     # select RE position within the gene
+#   mutate(correct_position = case_when(
+#     start_RE > start_gene &
+#       end_RE < end_gene         ~ "correct"
+#   )) %>%
+#   filter(correct_position == "correct") %>% 
+#     select(-correct_position)
+# 
+#   data <- bind_rows(data, data_chr)
+# 
+# }
+# L1_beta_results <- data
+# rm(chr_vec, n, i, data, data_chr)
+
+# annotated_L1 <- rempAnnot(remp_res_L1)
+# annotated_L1_ <- annotated_L1 %>% as_tibble()
+
+L1_beta_results <-
+  annot_L1_beta_results %>%
   # Merge with annotation, get #chr, start, end
-  left_join(., as_tibble(remp_res_ERV@metadata$REannotation), by = c("Index" = "Index"))
+  left_join(., as_tibble(rempAnnot(remp_res_L1)), by = "Index")
+  
+L1_beta_results <- L1_beta_results %>% 
+  mutate(symbol = coalesce(InNM.symbol, InNR.symbol, InTSS.symbol, 
+                           In5UTR.symbol, InCDS.symbol, InExon.symbol, 
+                           In3UTR.symbol)) 
 
-# Merge with refgene, get gene symbol
-chr_vec <- paste0("chr", c(seq(1, 22, 1)))
-data <- data.frame(matrix(nrow=0, ncol=0))
-# data <- data.frame(matrix(nrow=1, ncol=0))
-for (i in chr_vec){
+L1_beta_results_ <- L1_beta_results %>% 
+  unite(Index, c(Index, seqnames:repName, symbol), sep = "; ") %>% 
+  column_to_rownames("Index") %>% 
+  select(starts_with("X")) %>% 
+  t() %>% as_tibble(rownames = "patient_id")
 
-  data_chr <- ERV_beta_results %>%
-  filter(seqnames == i) %>%
-  # Merge with refgene, get gene symbol
-  left_join(., as_tibble(remp_res_ERV@metadata$refGene), by = c("seqnames", "strand"), suffix = c("_RE", "_gene")) %>%
-    # select RE position within the gene
-  mutate(correct_position = case_when(
-    start_RE > start_gene &
-      end_RE < end_gene         ~ "correct"
-  )) %>%
-  filter(correct_position == "correct")
 
-  data <- bind_rows(data, data_chr)
-
-}
-ERV_beta_results <- data
-rm(chr_vec, i, data, data_chr)
+# write_rds(L1_beta_results_, "intermediary data/L1_beta_results.rds")
 ```
 
 # VIII. Results analysis
 ## RE Summary
-Sorry for the long table!
+Sorry for the long table, I didn't aggregate the value per gene yet!
 ```{r, echo = FALSE}
-ERV_beta_results %>%
+L1_beta_results %>%
   mutate(seqnames = factor(seqnames)) %>%
-  select(seqnames, GeneSymbol) %>%
+  select(seqnames, symbol) %>%
   tbl_summary()
 ```
 
@@ -427,47 +410,47 @@ phenoclean <- phenoclean %>%
 
 
 
-ERV_beta_results1 <- ERV_beta_results %>%
-  select(Index, seqnames, name, GeneSymbol,
+L1_beta_results1 <- L1_beta_results %>%
+  select(Index, seqnames, repName, symbol,
          starts_with("X")) %>%
-  unite(Ids, c("Index", "seqnames", "name", "GeneSymbol"))
+  unite(Ids, c("Index", "seqnames", "repName", "symbol"))
 
-map_df1 <- ERV_beta_results1 %>%
+map_df1 <- L1_beta_results1 %>%
   column_to_rownames("Ids")
 map_df2 <- map_df1 %>% t() %>% as_tibble() %>%
   cbind(patient_id = colnames(map_df1), .) %>%
   mutate(patient_id = str_remove(patient_id, "X"))
 
-ERV_data <- map_df2 %>%
+L1_data <- map_df2 %>%
   full_join(phenoclean, ., by = c("Complete.Barcode" = "patient_id"))
 ```
 Quick look at the data
 ```{r, fig.height=12, fig.width=12, echo = FALSE}
-ERV_data
+L1_data
 ```
 
 Another heatmap for fun!
 ```{r, fig.height=12, fig.width=12, echo = FALSE}
-map_df1 <- ERV_data %>%
+map_df1 <- L1_data %>%
   unite(Complete.Barcode, c(Complete.Barcode, bmi_cat, grade,
                             stage, debulking_CA125, karyotype,
                             smokcurrent), sep = "_") %>%
   column_to_rownames("Complete.Barcode") %>%
-  select(starts_with("ERV"))
+  select(starts_with("L1"))
 
 
-map_df <- map_df1[,1:200] #%>% group_by(ERV) %>% mutate(type = row_number())
+map_df <- map_df1[,1:200] #%>% group_by(L1) %>% mutate(type = row_number())
 
 df_map1 <- t(scale(as.matrix(map_df)))
 
 
 
-column_col = HeatmapAnnotation(bmi_cat = c(ERV_data$bmi_cat),
-                              grade = c(ERV_data$grade),
-                              stage = c(ERV_data$stage),
-                              debulking_CA125 = c(ERV_data$debulking_CA125),
-                              karyotype = c(ERV_data$karyotype),
-                              smokcurrent = c(ERV_data$smokcurrent),
+column_col = HeatmapAnnotation(bmi_cat = c(L1_data$bmi_cat),
+                              grade = c(L1_data$grade),
+                              stage = c(L1_data$stage),
+                              debulking_CA125 = c(L1_data$debulking_CA125),
+                              karyotype = c(L1_data$karyotype),
+                              smokcurrent = c(L1_data$smokcurrent),
                               col = list(bmi_cat = c("<25" = "#721F81FF",
                                                      "25-29" = "#FD9567FF",
                                                      "30-34" = "#FEC98DFF",
@@ -486,8 +469,8 @@ column_col = HeatmapAnnotation(bmi_cat = c(ERV_data$bmi_cat),
                                                          "former smoker" = "#FDE725FF",
                                                          "never smoker" = "tomato"),
     na_col = "black"))
-row_col = rowAnnotation(Chromosome = c(ERV_beta_results$seqnames[1:200]),
-                        Gene = c(ERV_beta_results$GeneSymbol[1:200]),
+row_col = rowAnnotation(Chromosome = c(L1_beta_results$seqnames[1:200]),
+                        Gene = c(L1_beta_results$symbol[1:200]),
                         col = list(
                           na_col = "black")
 )
@@ -502,41 +485,41 @@ Heatmap(df_map1, name = " ",
         )
 ```
 
-## Linear regression
-<span style="color: red;">Can we model a type of RE? Not sure it is something we can/should look at.</span>  
-```{r}
-glm(ERV_0000303_chr1_NM_001282669_DFFB ~
-      refage + stage + grade + debulking_CA125 + bmi_cat,
-    data = ERV_data
-) %>%
-  tbl_regression(exponentiate = TRUE,
-                 intercept = TRUE)
-```
+<!-- ## Linear regression -->
+<!-- <span style="color: red;">Can we model a type of RE? Not sure it is something we can/should look at.</span>   -->
+<!-- ```{r} -->
+<!-- glm(L1_0000303_chr1_NM_001242874_PRKCZ ~ -->
+<!--       refage + stage + grade + debulking_CA125 + bmi_cat, -->
+<!--     data = L1_data -->
+<!-- ) %>% -->
+<!--   tbl_regression(exponentiate = TRUE, -->
+<!--                  intercept = TRUE) -->
+<!-- ``` -->
 
 
 
-## Survival
-I think we will create categories of RE to add to survival analysis but just for a start...
-```{r}
-tbl1 <- ERV_data %>% select(vitalstatus, timelastfu,
-                            refage, stage, grade,
-                            debulking_CA125, bmi_cat) %>%
-  tbl_uvregression(method = survival::coxph,
-                   y = (Surv(time = ERV_data$timelastfu,
-                             event = ERV_data$vitalstatus)),
-                   exponentiate = TRUE) %>%
-  bold_labels() %>% italicize_levels() %>%
-  bold_p(t = .05) %>% add_nevent(location = "level") %>% add_n(location = "level")
-tbl2 <-
-  coxph(Surv(time = ERV_data$timelastfu,
-             event = ERV_data$vitalstatus) ~
-          refage + stage + grade + debulking_CA125 + bmi_cat,
-        data =  ERV_data) %>%
-  tbl_regression(exponentiate = TRUE) %>%
-  bold_p(t = .05) %>%
-  add_nevent(location = "level") %>% add_n(location = "level")
-tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
-```
+<!-- ## Survival -->
+<!-- I think we will create categories of RE to add to survival analysis but just for a start... -->
+<!-- ```{r} -->
+<!-- tbl1 <- L1_data %>% select(vitalstatus, timelastfu, -->
+<!--                             refage, stage, grade, -->
+<!--                             debulking_CA125, bmi_cat) %>% -->
+<!--   tbl_uvregression(method = survival::coxph, -->
+<!--                    y = (Surv(time = L1_data$timelastfu, -->
+<!--                              event = L1_data$vitalstatus)), -->
+<!--                    exponentiate = TRUE) %>% -->
+<!--   bold_labels() %>% italicize_levels() %>% -->
+<!--   bold_p(t = .05) %>% add_nevent(location = "level") %>% add_n(location = "level") -->
+<!-- tbl2 <- -->
+<!--   coxph(Surv(time = L1_data$timelastfu, -->
+<!--              event = L1_data$vitalstatus) ~ -->
+<!--           refage + stage + grade + debulking_CA125 + bmi_cat, -->
+<!--         data =  L1_data) %>% -->
+<!--   tbl_regression(exponentiate = TRUE) %>% -->
+<!--   bold_p(t = .05) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") -->
+<!-- tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**")) -->
+<!-- ``` -->
 
 
 
