@@ -52,7 +52,7 @@ title <- paste0(getwd(), "/consensus plots")
 results <- ConsensusClusterPlus(
   ready_data, # data to use
   maxK = 20, # a maximum evalulated k of 20 so that cluster counts of 2,3,4,...,20 are evaluated
-  reps = 50, # 1000 resamplings
+  reps = 1000, # 1000 resamplings
   pItem = 0.8, # 80% item resampling
   pFeature = 1, # 80% gene resampling
   title = title, # output

@@ -1,0 +1,191 @@
+---
+title: "Consensus clustering"
+author: "Christelle Colin-Leitzinger"
+date: '`r Sys.Date()`'
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: false
+    theme: united
+    code_folding: hide
+    highlight: pygments
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+
+.figure {
+   margin-top: 25px;
+   margin-bottom: 100px;
+}
+
+table {
+    margin-top: 10px;
+    margin-bottom: 25px;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+                      warning = FALSE,
+                      message = FALSE,
+                      cache = FALSE,
+                      fig.align='center'
+                      )
+```
+
+```{r library, echo = FALSE}
+library(tidyverse)
+library(REMP)
+library(ConsensusClusterPlus)
+citation("ConsensusClusterPlus")
+```
+ConsensusClusterPlus Paper:  
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2881355/
+
+Algorithm
+ConsensusClusterPlus extends the CC algorithm and is briefly described here. The algorithm begins by subsampling a proportion of items and a proportion of features from a data matrix. Each subsample is then partitioned into up to k groups by a user-specified clustering algorithm: agglomerative hierarchical clustering, k-means or a custom algorithm. This process is repeated for a specified number of repetitions. Pairwise consensus values, defined as ‘the proportion of clustering runs in which two items are [grouped] together’ (Monti et al., 2003), are calculated and stored in a consensus matrix (CM) for each k. Then for each k, a final agglomerative hierarchical consensus clustering using distance of 1−consensus values is completed and pruned to k groups, which are called consensus clusters.
+
+```{r load data}
+remp_res_Alu <- read_rds(paste0(here::here(), "/intermediary data/remp_results_Alu.rds"))
+remp_res_ERV <- read_rds(paste0(here::here(), "/intermediary data/remp_results_ERV.rds"))
+remp_res_L1 <- read_rds(paste0(here::here(), "/intermediary data/remp_results_L1.rds"))
+```
+
+# Prep data
+Prep each RE type data
+```{r prep individual data, class.source = 'fold-show'}
+# Use the non trimmed data to create cluster because need to not have any NAs
+# Aggregation step is then done manually to eliminate RE repeat
+
+# L1
+# Get Beta
+L1_beta_results <- rempB(remp_res_L1)
+L1_beta_results <- L1_beta_results %>% as_tibble() %>%
+  cbind(Index = remp_res_L1@rowRanges@elementMetadata$RE.Index, .) %>% 
+  # Remove this sample as lots of NAs
+  select(-"X203717920012_R01C01")
+
+# Summarize to remove duplicate measurement
+L1_df <- L1_beta_results %>%
+  group_by(Index) %>%
+  mutate(n = n(), .before = 2) %>%
+  # Summarize RE when at least 2 predicted CpG sites
+  # As rempAggregate() use the mean
+  filter(n > 1) %>% select(-n) %>%
+  summarise(across(everything(), mean))
+```
+Do the same for Alu and LTR
+```{r}
+Alu_beta_results <- rempB(remp_res_Alu)
+Alu_beta_results <- Alu_beta_results %>% as_tibble() %>%
+  cbind(Index = remp_res_Alu@rowRanges@elementMetadata$RE.Index, .) %>% 
+  select(-"X203717920012_R01C01")
+
+Alu_df <- Alu_beta_results %>% 
+  group_by(Index) %>% 
+  mutate(n = n(), .before = 2) %>% 
+  # Summarize RE when at least 2 predicted CpG sites
+  # As rempAggregate() use the mean
+  filter(n > 1) %>% select(-n) %>% 
+  summarise(across(everything(), mean))
+
+ERV_beta_results <- rempB(remp_res_ERV)
+ERV_beta_results <- ERV_beta_results %>% as_tibble() %>%
+  cbind(Index = remp_res_ERV@rowRanges@elementMetadata$RE.Index, .) %>% 
+  select(-"X203717920012_R01C01")
+
+ERV_df <- ERV_beta_results %>% 
+  group_by(Index) %>% 
+  mutate(n = n(), .before = 2) %>% 
+  # Summarize RE when at least 2 predicted CpG sites
+  # As rempAggregate() use the mean
+  filter(n > 1) %>% select(-n) %>% 
+  summarise(across(everything(), mean))
+```
+
+Join and prep matrix
+```{r join and prep overall data, class.source = 'fold-show'}
+full_beta <- bind_rows(Alu_df, L1_df, ERV_df)
+
+# The input data format is a matrix where columns are samples (items), rows are features
+full_beta <- full_beta %>%
+  column_to_rownames("Index") %>% 
+  as.matrix()
+```
+
+
+# Select the most informative features
+`r emo::ji("question_mark")` I am not sure if I should do it separately for each RE and then join them instead...
+```{r select the most informative features, class.source = 'fold-show'}
+# Reduce the data set to the top 5,000 most variable genes, measured by median absolute deviation (MAD).
+mads <- apply(full_beta, 1, mad) 
+full_beta <- full_beta[rev(order(mads))[1:5000],]
+```
+
+
+# Transform the data with agglomerative hierarchical clustering algorithm using Pearson correlation distance
+```{r Trnsform the data, class.source = 'fold-show'}
+ready_data <- sweep(full_beta, 1, apply(full_beta, 1, median,na.rm=T))
+```
+
+# Run ConsensusClusterPlus
+`r emo::ji("pencil")` Used hierarchical clustering instead of k means for normal clustering. I am not sure which would be best.  
+`r emo::ji("question_mark")` How do we decide?
+```{r ConsensusClusterPlus, class.source = 'fold-show'}
+title <- "/Users/colinccm/Documents/GitHub/Peres/methylomics_disparities/consensus plots"
+results <- ConsensusClusterPlus(
+  ready_data, # data to use
+  maxK = 10, # a maximum evalulated k of 20 so that cluster counts of 2,3,4,...,20 are evaluated
+  reps = 1000, # 1000 resamplings
+  pItem = 0.8, # 80% item resampling
+  pFeature = 1, # 80% gene resampling
+  title = title, # output
+  clusterAlg = "hc", # hierarchical clustering
+  distance = "pearson",
+  seed = 123#, plot = "pngBMP"
+  )
+```
+
+
+# Explore results
+
+**Heatmaps**  
+For each k, CM plots depict consensus values on a white to blue colour scale, are ordered by the consensus clustering which is shown as a dendrogram, and have items’ consensus clusters marked by coloured rectangles between the dendrogram and consensus values (Fig. 1A). This new feature of ConsensusClusterPlus enables quick and accurate visualization of cluster boundaries, which are not labelled in CC. The purpose of CM plots is to find the ‘cleanest’ cluster partition where items nearly always either cluster together giving a high consensus (dark blue colour) or do not cluster together giving a low consensus (white).
+`r emo::ji("pencil")` In our results, cluster increment improve the cleanliness of the blocks (better separation of the blocks). Best improvement happens with 2 to 5 k cluster, then less improvement is observed between each increment.  
+**CDF plots**  
+Empirical cumulative distribution function (CDF) plots display consensus distributions for each k (Fig. 1C). The purpose of the CDF plot is to find the k at which the distribution reaches an approximate maximum, which indicates a maximum stability and after which divisions are equivalent to random picks rather than true cluster structure.  
+`r emo::ji("pencil")` Same as before, cluster increment improve the cumulative distribution. Best improvement happens between 2k and 4k cluster, then the effect is milder.  
+Relative change in CDF AUC  
+`r emo::ji("pencil")` Looks like the elbow plot was added to the package after the paper publication. we can see the same as for the CDF plot. Help to make a decision between 3k or 4k.  
+**"Tile plot"**  
+The item tracking plot (Fig. 1B) shows the consensus cluster of items (in columns) at each k (in rows). This allows a user to track an item’s cluster assignments across different k, to identify promiscuous items that are suggestive of weak class membership, and to visualize the distribution of cluster sizes across k (Supplementary Fig. 1 for example of promiscuous samples). This plot is similar to colour maps (Hoffmann et al., 2007).  
+`r emo::ji("pencil")` Helps to see patients grouping. With 3k we see clustering in dark blue, light blue and light green. 4k create a big dark green group.  
+
+The colour schemes between the CM, item tracking, IC and CLC plots are coordinated which enable cross-plot analysis. The colour scheme is defined by the rule that clusters at a k are given the same colour as a cluster at k − 1 if the majority of their members are shared. Otherwise, a new colour is assigned.
+
+
+```{r results, class.source = 'fold-show'}
+# Results for 3 k cluster
+results[[3]][["consensusMatrix"]][1:5,1:5]
+
+#consensusClass-thesampleclassifications 
+results[[3]][["consensusClass"]][1:5]
+```
+
+**Stacked Bar plots**  
+Item-consensus (IC) is the average consensus value between an item and members of a consensus cluster, so that there are multiple IC values for an item at a k corresponding to the k clusters. IC plots display items as vertical bars of coloured rectangles whose height corresponds to IC values (Fig. 1D). Consensus clusters of items are marked by coloured asterisks atop the bars. IC plots enable a user to view which samples are highly representative of a cluster and which samples have mixed cluster association and to possibly select cluster-representative samples.  
+**Histogram**  
+Cluster-consensus (CLC) is the average pairwise IC of items in a consensus cluster. The CLC plot displays these values as a bar plot that are grouped at each k (Fig. 1E). The CLC plots enable a user to assess the impact adding a new cluster on the CLC values of existing clusters.  
+```{r results2, class.source = 'fold-show'}
+# Calculate cluster consensus and item-consensus results
+icl <- calcICL(results, title = title#, plot = "pngBMP"
+               )
+
+icl[["clusterConsensus"]]
+
+icl[["itemConsensus"]][1:10,]
+```
