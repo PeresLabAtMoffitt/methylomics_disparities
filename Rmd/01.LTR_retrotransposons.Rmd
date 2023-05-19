@@ -302,12 +302,12 @@ The aggregate B value data has again a reduced number of RE. The dimension is no
 
 It doesn't shows multiple instance for 1 RE type anymore (here the first 20 rows):
 ```{r}
+aggr_ERV_beta_results <- aggr_ERV_beta_results %>% as_tibble() %>%
+  cbind(ERV = remp_res_ERV@rowRanges@elementMetadata$RE.Index, .)
 aggr_ERV_beta_results$ERV[1:20]
 ```
 
 ```{r, fig.height=12, fig.width=12, echo = FALSE}
-aggr_ERV_beta_results <- aggr_ERV_beta_results %>% as_tibble() %>%
-  cbind(ERV = remp_res_ERV@rowRanges@elementMetadata$RE.Index, .)
 map_df <- aggr_ERV_beta_results[1:200,] %>% group_by(ERV) %>% mutate(type = row_number())
 
 map_df1 <- map_df %>%
