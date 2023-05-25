@@ -17,9 +17,12 @@
 *.csv
 *.xlsx
 *.docx
+*.pdf
 *.rds
 *.rda
+*.Rdata
 *.pptx
+*.zip
 
 # Example code in progress
 *-Ex.R
