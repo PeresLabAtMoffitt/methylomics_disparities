@@ -285,32 +285,32 @@ Keep the 5000 most informative feature using mad. `r emo::ji("question_mark")` <
 
 # L1_imputed1 <- L1_imputed %>% as_tibble(rownames = "patient_id")
 
-L1_mads <- apply((L1_imputed), 1, mad) 
-L1_df <- L1_imputed[rev(order(L1_mads))[1:5000],]
+# L1_mads <- apply((L1_imputed), 1, mad) 
+# L1_df <- L1_imputed[rev(order(L1_mads))[1:5000],]
 L1_var <- apply(L1_imputed, 1, var) 
-L1_df_var <- L1_imputed[rev(order(L1_var))[1:5000],]
+L1_df <- L1_imputed[rev(order(L1_var))[1:5000],]
 
-Alu_mads <- apply(Alu_imputed, 1, mad) 
-Alu_df <- Alu_imputed[rev(order(Alu_mads))[1:5000],]
+Alu_var <- apply(Alu_imputed, 1, var) 
+Alu_df <- Alu_imputed[rev(order(Alu_var))[1:5000],]
 
-ERV_mads <- apply(ERV_imputed, 1, mad) 
-ERV_df <- ERV_imputed[rev(order(ERV_mads))[1:5000],]
+ERV_var <- apply(ERV_imputed, 1, var) 
+ERV_df <- ERV_imputed[rev(order(ERV_var))[1:5000],]
 ```
 
-Compare mad vs var
-```{r}
-a <- L1_df %>% 
-  as_tibble(rownames = "re_index") %>% select(re_index) %>% 
-  mutate(data = "in_mads") %>% 
-  full_join(., L1_df_var %>% 
-              as_tibble(rownames = "re_index") %>% select(re_index) %>% 
-  mutate(data = "in_var"),
-  by = "re_index"
-  )
-print(paste("Between using mad and var, there is", 
-            sum(is.na(a$data.x)), 
-            "CpGs picked differently over 5000."))
-```
+<!-- Compare mad vs var -->
+<!-- ```{r} -->
+<!-- a <- L1_df %>%  -->
+<!--   as_tibble(rownames = "re_index") %>% select(re_index) %>%  -->
+<!--   mutate(data = "in_mads") %>%  -->
+<!--   full_join(., L1_df_var %>%  -->
+<!--               as_tibble(rownames = "re_index") %>% select(re_index) %>%  -->
+<!--   mutate(data = "in_var"), -->
+<!--   by = "re_index" -->
+<!--   ) -->
+<!-- print(paste("Between using mad and var, there is",  -->
+<!--             sum(is.na(a$data.x)),  -->
+<!--             "CpGs picked differently over 5000.")) -->
+<!-- ``` -->
 
 ## Transform the data with agglomerative hierarchical clustering algorithm using Pearson correlation distance
 ```{r Transform the data, class.source = 'fold-show'}
@@ -330,7 +330,8 @@ ready_ERV_df <- sweep(ERV_df, 1, apply(ERV_df, 1, median,na.rm=T))
 #### Use the concatenated code to create elbow plot just to see how many k if put all the data together.
 ```{r}
 # library(ConsensusClusterPlus)
-title <- "/Users/colinccm/Documents/GitHub/Peres/methylomics_disparities/clustering/temp_L1_consensus_plots"
+# a <- bind_rows(as_tibble(ready_L1_df), as_tibble(ready_Alu_df), as_tibble(ready_ERV_df))
+title <- "/Users/colinccm/Documents/GitHub/Peres/methylomics_disparities/clustering/var_temp_L1_consensus_plots"
 # results <- ConsensusClusterPlus(
 #   as.matrix(a), # data to use
 #   maxK = 10, # a maximum evalulated k of 20 so that cluster counts of 2,3,4,...,20 are evaluated
@@ -362,8 +363,8 @@ knitr::include_graphics(paste0(title, '/consensus012.png'))
 # NEW
 # bcc_res_4 <- BCC(X= list(ready_Alu_df, ready_ERV_df, ready_L1_df),
 #                  K= 2) # 15 min
-# write_rds(bcc_res_4, "clustering/BCC/bcc_res2k_limiteddata_08022023.rds")
-bcc_res_4 <- read_rds(paste0(here::here(), "/clustering/BCC/bcc_res2k_limiteddata_08022023.rds"))
+# write_rds(bcc_res_4, "clustering/BCC/bcc_res2k_limiteddata_withvar_08022023.rds")
+bcc_res_4 <- read_rds(paste0(here::here(), "/clustering/BCC/bcc_res2k_limiteddata_withvar_08022023.rds"))
 
 
 
@@ -623,13 +624,13 @@ library(iClusterPlus)
 #                              n.lambda = NULL,
 #                              K = k,
 #                              maxiter = 20)
-#   save(cv.fit,file = paste("cv.fit.k",k,".Rdata",sep = ""))
+#   save(cv.fit,file = paste("cv_var.fit.k",k,".Rdata",sep = ""))
 # }
 output=alist()
 
 files=list.files(
   path = here::here(),
-  pattern = "cv.fit",
+  pattern = "cv_var.fit",
   recursive = FALSE,
   full.names = TRUE)
 
@@ -768,8 +769,8 @@ nearest neighbors using a Euclidean metric through argument of na.action.
 # cluster_data <- list(L1_dat = elite_L1$elite.dat,
 #                 Alu_dat = elite_Alu$elite.dat,
 #                 ERV_dat = elite_ERV$elite.dat)
-# write_rds(cluster_data, "clustering/MOVICS/movics_cluster_data_08032023.rds")
-cluster_data <- readRDS("~/Documents/GitHub/Peres/methylomics_disparities/clustering/MOVICS/movics_cluster_data_08032023.rds")
+# write_rds(cluster_data, "clustering/MOVICS/var_movics_cluster_data_08032023.rds")
+cluster_data <- readRDS("~/Documents/GitHub/Peres/methylomics_disparities/clustering/MOVICS/var_movics_cluster_data_08032023.rds")
 ```
 
 ## Get optimal number for clustering
@@ -777,8 +778,8 @@ cluster_data <- readRDS("~/Documents/GitHub/Peres/methylomics_disparities/cluste
 # optimal_k <- getClustNum(data = cluster_data,
 #                          is.binary = c(F,F,F),
 #                          try.N.clust = 2:10, # try cluster number from 2 to 10
-#                          fig.name = "Best cluster number for methylation data_08032023")
-knitr::include_graphics('/Users/colinccm/Documents/GitHub/Peres/methylomics_disparities/clustering/MOVICS/Best cluster number for methylation data_08032023.jpeg')
+#                          fig.name = "Best cluster number for methylation var_data_08082023")
+knitr::include_graphics('/Users/colinccm/Documents/GitHub/Peres/methylomics_disparities/clustering/MOVICS/Best cluster number for methylation var_data_08082023.jpeg')
 ```
 
 ## Perform multi-omics integrative clustering with 9 algorithms
@@ -825,8 +826,8 @@ The package also used iClusterBayes so I might not need to try the iClusterPlus 
 # cluster_res_list <- append(cluster_res_list,
 #                         list("iClusterBayes" = iClusterBayes.res))
 # 
-# write_rds(cluster_res_list, "clustering/MOVICS/movics_cluster_res_list_08032023.rds")
-cluster_res_list <- read_rds(paste0(here::here(), "/clustering/MOVICS/movics_cluster_res_list_08032023.rds"))
+# write_rds(cluster_res_list, "clustering/MOVICS/var_movics_cluster_res_list_08082023.rds")
+cluster_res_list <- read_rds(paste0(here::here(), "/clustering/MOVICS/var_movics_cluster_res_list_08082023.rds"))
 ```
 
 ## Get consensus from different algorithms - Heatmap
@@ -888,7 +889,7 @@ getMoHeatmap(data          = plot_cluster,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, # width of each subheatmap
              height        = 5, # height of each subheatmap
-             fig.name      = "Comprehensive of NEMO_08032023")
+             fig.name      = "Comprehensive of NEMO_08082023")
 
 getMoHeatmap(data          = plot_cluster_mvalue,
              row.title     = c("L1_dat","Alu_dat","ERV_dat"),
@@ -901,7 +902,7 @@ getMoHeatmap(data          = plot_cluster_mvalue,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, # width of each subheatmap
              height        = 5, # height of each subheatmap
-             fig.name      = "Comprehensive of NEMO M value_08032023")
+             fig.name      = "Comprehensive of NEMO M value_08082023")
 ```
 
 ### COCA
@@ -917,7 +918,7 @@ getMoHeatmap(data          = plot_cluster,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, 
              height        = 5, 
-             fig.name      = "Comprehensive of COCA_08032023")
+             fig.name      = "Comprehensive of COCA_08082023")
 
 getMoHeatmap(data          = plot_cluster_mvalue,
              row.title     = c("L1_dat","Alu_dat","ERV_dat"),
@@ -930,7 +931,7 @@ getMoHeatmap(data          = plot_cluster_mvalue,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, 
              height        = 5, 
-             fig.name      = "Comprehensive of COCA M value_08032023")
+             fig.name      = "Comprehensive of COCA M value_08082023")
 ```
 
 ### ConsensusClustering
@@ -946,7 +947,7 @@ getMoHeatmap(data          = plot_cluster,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, 
              height        = 5, 
-             fig.name      = "Comprehensive of ConsensusClustering_08032023")
+             fig.name      = "Comprehensive of ConsensusClustering_08082023")
 
 getMoHeatmap(data          = plot_cluster_mvalue,
              row.title     = c("L1_dat","Alu_dat","ERV_dat"),
@@ -959,7 +960,7 @@ getMoHeatmap(data          = plot_cluster_mvalue,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, 
              height        = 5, 
-             fig.name      = "Comprehensive of ConsensusClustering M value_08032023")
+             fig.name      = "Comprehensive of ConsensusClustering M value_08082023")
 ```
 
 ### IntNMF
@@ -975,7 +976,7 @@ getMoHeatmap(data          = plot_cluster,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, 
              height        = 5, 
-             fig.name      = "Comprehensive of IntNMF_08032023")
+             fig.name      = "Comprehensive of IntNMF_08082023")
 
 getMoHeatmap(data          = plot_cluster_mvalue,
              row.title     = c("L1_dat","Alu_dat","ERV_dat"),
@@ -988,7 +989,7 @@ getMoHeatmap(data          = plot_cluster_mvalue,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, 
              height        = 5, 
-             fig.name      = "Comprehensive of IntNMF M value_08032023")
+             fig.name      = "Comprehensive of IntNMF M value_08082023")
 ```
 
 ### MoCluster
@@ -1004,7 +1005,7 @@ getMoHeatmap(data          = plot_cluster,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, 
              height        = 5, 
-             fig.name      = "Comprehensive of MoCluster_08032023")
+             fig.name      = "Comprehensive of MoCluster_08082023")
 
 getMoHeatmap(data          = plot_cluster_mvalue,
              row.title     = c("L1_dat","Alu_dat","ERV_dat"),
@@ -1017,7 +1018,7 @@ getMoHeatmap(data          = plot_cluster_mvalue,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, 
              height        = 5, 
-             fig.name      = "Comprehensive of MoCluster M value_08032023")
+             fig.name      = "Comprehensive of MoCluster M value_08082023")
 ```
 
 ### iClusterBayes
@@ -1033,7 +1034,7 @@ getMoHeatmap(data          = plot_cluster,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, 
              height        = 5, 
-             fig.name      = "Comprehensive of iClusterBayes_08032023")
+             fig.name      = "Comprehensive of iClusterBayes_08082023")
 
 getMoHeatmap(data          = plot_cluster_mvalue,
              row.title     = c("L1_dat","Alu_dat","ERV_dat"),
@@ -1046,7 +1047,7 @@ getMoHeatmap(data          = plot_cluster_mvalue,
                                   c("#0000FF", "white"  , "#FF0000")),
              width         = 10, 
              height        = 5, 
-             fig.name      = "Comprehensive of iClusterBayes M value_08032023")
+             fig.name      = "Comprehensive of iClusterBayes M value_08082023")
 ```
 
 # 2x2 table
@@ -1211,7 +1212,24 @@ tbl_MoCluster <- tbl_merge(list(tbl1, tbl2, tbl3, tbl4, tbl5, tbl6, tbl7),
 tbl_stack(list(tbl_bcc, tbl_iClusterBayes, tbl_NEMO, tbl_COCA,
                tbl_ConsensusClustering, tbl_IntNMF,
                tbl_MoCluster))  %>%
-  modify_caption("**select features with mad")
+  modify_caption("**select features with var")
 
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
