@@ -1050,7 +1050,7 @@ getMoHeatmap(data          = plot_cluster_mvalue,
 ```
 
 # 2x2 table
-```{r}
+```{r 2x2 table}
 a <- bayesclus %>% 
   rename("patient_id" = "samID") %>% 
   select(samID, overall_bcc) %>% 
@@ -1215,3 +1215,69 @@ tbl_stack(list(tbl_bcc, tbl_iClusterBayes, tbl_NEMO, tbl_COCA,
 
 ```
 
+# Do we have batch effect?
+```{r look at batch effect}
+load(paste0(here::here(), "/cleaned_07082022.rda"))
+
+phenoclean <- phenoclean %>%
+  select(-c(starts_with("chr"))) %>%
+  remove_rownames() %>%
+  mutate(suid = Sample_Name) %>%
+  select(patient_id = Complete.Barcode, suid, everything(), -c(Sample_Name, roi_num : Basename))
+
+annCol <- phenoclean %>% select(patient_id, Batch) %>% 
+  mutate(patient_id = paste0("X", patient_id))
+coca_cluster_results <- cluster_res_list$COCA$clust.res %>%
+  remove_rownames()
+
+coca_cluster_results <- coca_cluster_results %>% 
+  full_join(., annCol, 
+            by = c("samID" = "patient_id"))
+
+# table(coca_cluster_results$clust, coca_cluster_results$Batch)
+coca_cluster_results %>% 
+  select(Batch, clust) %>% 
+  tbl_summary(by = Batch) %>% 
+  add_p() %>% add_overall() %>% 
+  modify_spanning_header(c(stat_1, stat_2, 
+                           stat_3) ~ "**Batch**")
+
+annCol <- annCol %>% 
+  column_to_rownames("patient_id")
+annColors <- list(Batch  = c("Doherty" = "blue",
+                            "Peres"   = "red",
+                            "Peres2"   = "yellow"))
+```
+
+## B then M value
+```{r COCA heatmap with batch, fig.height=8}
+getMoHeatmap(data          = plot_cluster,
+             row.title     = c("L1_dat","Alu_dat","ERV_dat"),
+             is.binary     = c(F,F,F),
+             legend.name   = c("L1_dat","Alu_dat","ERV_dat"),
+             clust.res     = cluster_res_list$COCA$clust.res, 
+             clust.dend    = NULL, 
+             color         = list(c("#0000FF", "white"  , "#FF3C38"), # col.list
+                                  c("#0000FF", "white"  , "#FF0000"),
+                                  c("#0000FF", "white"  , "#FF0000")),
+             width         = 10, 
+             height        = 5, 
+             annCol        = annCol, # annotation for samples
+             annColors     = annColors, # annotation color
+             fig.name      = "Comprehensive of COCA_with_batches_08032023")
+
+getMoHeatmap(data          = plot_cluster_mvalue,
+             row.title     = c("L1_dat","Alu_dat","ERV_dat"),
+             is.binary     = c(F,F,F),
+             legend.name   = c("L1_dat","Alu_dat","ERV_dat"),
+             clust.res     = cluster_res_list$COCA$clust.res, 
+             clust.dend    = NULL, 
+             color         = list(c("#0000FF", "white"  , "#FF3C38"), # col.list
+                                  c("#0000FF", "white"  , "#FF0000"),
+                                  c("#0000FF", "white"  , "#FF0000")),
+             width         = 10, 
+             height        = 5, 
+             annCol        = annCol, # annotation for samples
+             annColors     = annColors, # annotation color
+             fig.name      = "Comprehensive of COCA M value_with_batches_08032023")
+```
