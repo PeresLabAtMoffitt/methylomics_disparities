@@ -99,6 +99,12 @@ phenoclean <- phenoclean %>%
     vitalstatus == 1                ~ 0,
     vitalstatus == 2                ~ 1
   )) %>% 
+  mutate(stage_cat = case_when(
+    stage == "Distant"              ~ "Late",
+    stage == "Localized"            ~ "Early",
+    stage == "Regional"             ~ "Early"
+  ), stage_cat = factor(stage_cat, levels = c("Early", "Late"))
+  ) %>% 
   rename(os_time = timelastfu) %>% 
   mutate(smoking_status = case_when(
     str_detect(smokcurrent, "current|former") ~ "Ever",
@@ -112,7 +118,8 @@ phenoclean <- phenoclean %>%
 met_data <- phenoclean %>% 
   inner_join(., coca_cluster_results,
             by = "patient_id") %>% 
-  mutate(across(where(is.character), ~ str_to_sentence(.)))
+  mutate(across(where(is.character), ~ str_to_sentence(.))) %>% 
+  mutate(coca_RE_cluster = as.character(coca_RE_cluster))
 ```
 
 
@@ -122,7 +129,8 @@ met_data <- phenoclean %>%
 met_data %>% 
   select(refage, race, ethnicity_dnam,
          karyotype,
-         stage, histology, grade, 
+         stage, stage_cat,
+         histology, grade, 
          BMI_recent, bmi_cat, bmi_cat2,
          smokcurrent, smoking_status,
          debulking_CA125, neoadjuvant, adjuvant,
@@ -151,7 +159,8 @@ met_data %>%
 met_data %>% 
   select(refage, race, ethnicity_dnam,
          karyotype,
-         stage, histology, grade, 
+         stage, stage_cat,
+         histology, grade, 
          BMI_recent, bmi_cat, bmi_cat2,
          smokcurrent, smoking_status,
          debulking_CA125, neoadjuvant, adjuvant,
@@ -180,7 +189,7 @@ met_data %>%
 ```{r}
 tbl1 <- met_data %>%
   select(coca_RE_cluster,
-         refage, stage) %>%
+         refage, stage_cat) %>%
   tbl_uvregression(method = survival::coxph,
                    y = (Surv(time = met_data$os_time,
                              event = met_data$os_event)),
@@ -189,7 +198,7 @@ tbl1 <- met_data %>%
   add_nevent(location = "level") %>% add_n(location = "level") %>%
   bold_labels() %>% italicize_levels()
 tbl2 <- coxph(Surv(time = met_data$os_time, 
-                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage, 
+                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat, 
               data = met_data)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
   bold_p(t = .05) %>% 
@@ -200,7 +209,7 @@ tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable*
 <!-- PH assumption -->
 <!-- ```{r} -->
 <!-- coxph(Surv(time = met_data$os_time, -->
-<!--                    event = met_data$os_event) ~ coca_RE_cluster + refage + stage, -->
+<!--                    event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat, -->
 <!--       data = met_data)  %>% -->
 <!--   cox.zph() -->
 <!-- ``` -->
@@ -212,7 +221,7 @@ tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable*
 ```{r}
 tbl1 <- met_data %>%
   select(coca_RE_cluster,
-         refage, stage, debulking_CA125) %>%
+         refage, stage_cat, debulking_CA125) %>%
   tbl_uvregression(method = survival::coxph,
                    y = (Surv(time = met_data$os_time,
                              event = met_data$os_event)),
@@ -221,7 +230,7 @@ tbl1 <- met_data %>%
   add_nevent(location = "level") %>% add_n(location = "level") %>%
   bold_labels() %>% italicize_levels()
 tbl2 <- coxph(Surv(time = met_data$os_time, 
-                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage + debulking_CA125, 
+                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, 
               data = met_data)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
   bold_p(t = .05) %>% 
@@ -232,7 +241,7 @@ tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable*
 PH assumption
 ```{r}
 coxph(Surv(time = met_data$os_time, 
-                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage + debulking_CA125, 
+                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, 
       data = met_data)  %>% 
   cox.zph()
 ```
@@ -265,46 +274,78 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
 
 # V. Sensitivity analysis
 
-## 1. Sensitivity analysis in patients who received adjuvant
-```{r}
-adj_data <- met_data %>%
-  filter(adjuvant == "Yes")
+<!-- ## 1. Sensitivity analysis in patients who received adjuvant -->
+<!-- ```{r} -->
+<!-- adj_data <- met_data %>% -->
+<!--   filter(adjuvant == "Yes") -->
 
-coxph(Surv(time = adj_data$os_time,
-                   event = adj_data$os_event) ~ coca_RE_cluster + refage + stage + debulking_CA125,
-              data = adj_data)  %>%
+<!-- coxph(Surv(time = adj_data$os_time, -->
+<!--                    event = adj_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, -->
+<!--               data = adj_data)  %>% -->
+<!--   tbl_regression(exponentiate = TRUE) %>% -->
+<!--   bold_p(t = .05) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") -->
+<!-- ``` -->
+<!-- <br> -->
+<!-- <br> -->
+
+## 1. Sensitivity analysis in patients with distant (late) stage
+```{r}
+distant_data <- met_data %>%
+  filter(stage_cat == "Late")
+
+coxph(Surv(time = distant_data$os_time,
+                   event = distant_data$os_event) ~ coca_RE_cluster + refage + debulking_CA125,
+              data = distant_data)  %>%
   tbl_regression(exponentiate = TRUE) %>%
   bold_p(t = .05) %>%
   add_nevent(location = "level") %>% add_n(location = "level")
-```
-<br>
-<br>
 
-# 2. Sensitivity analysis in patients with serous histology
+ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster, 
+                   data=distant_data),
+           title = "OS Analysis",
+           font.main = c(20, "bold", "black"),
+           font.x = c(18, "bold", "black"),
+           font.y = c(18, "bold", "black"),
+           font.legend = c(16, "black"),
+           font.tickslab = c(16, "bold", "black"),
+           size = 1.5,
+
+           xlab = "Time in months",
+           legend = "top",
+           legend.title = "",
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) + guides(colour = guide_legend(ncol = 1))
+```
+
+## 2. Sensitivity analysis in patients with serous histology
 ```{r}
 serous_data <- met_data %>%
   filter(histology == "Serous")
 
 coxph(Surv(time = serous_data$os_time,
-                   event = serous_data$os_event) ~ coca_RE_cluster + refage + stage + debulking_CA125,
+                   event = serous_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125,
               data = serous_data)  %>%
   tbl_regression(exponentiate = TRUE) %>%
   bold_p(t = .05) %>%
   add_nevent(location = "level") %>% add_n(location = "level")
 ```
 
-# 3. Sensitivity analysis in patients with Black or african american DNA
-```{r}
-black_data <- met_data %>%
-  filter(ethnicity_dnam == "Black or african american")
+<!-- ## 3. Sensitivity analysis in patients with Black or african american DNA -->
+<!-- ```{r} -->
+<!-- black_data <- met_data %>% -->
+<!--   filter(ethnicity_dnam == "Black or african american") -->
 
-coxph(Surv(time = black_data$os_time,
-                   event = black_data$os_event) ~ coca_RE_cluster + refage + stage + debulking_CA125,
-              data = black_data)  %>%
-  tbl_regression(exponentiate = TRUE) %>%
-  bold_p(t = .05) %>%
-  add_nevent(location = "level") %>% add_n(location = "level")
-```
+<!-- coxph(Surv(time = black_data$os_time, -->
+<!--                    event = black_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, -->
+<!--               data = black_data)  %>% -->
+<!--   tbl_regression(exponentiate = TRUE) %>% -->
+<!--   bold_p(t = .05) %>% -->
+<!--   add_nevent(location = "level") %>% add_n(location = "level") -->
+<!-- ``` -->
 
 
 
