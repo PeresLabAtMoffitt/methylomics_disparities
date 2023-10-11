@@ -1,5 +1,5 @@
 ---
-title: "Retrotransposons analysis"
+title: "Retrotransposons analysis 5 years survival"
 author: "Christelle Colin-Leitzinger"
 date: '`r Sys.Date()`'
 output: 
@@ -109,7 +109,15 @@ phenoclean <- phenoclean %>%
     vitalstatus == 1                ~ 0,
     vitalstatus == 2                ~ 1
   )) %>% 
-  rename(os_time = timelastfu)
+  mutate(os_time = timelastfu) %>% 
+  mutate(os_time_5year = case_when(
+    os_time < day(seconds_to_period(dyears(5)))              ~ os_time,
+    TRUE                                                     ~ day(seconds_to_period(dyears(5)))
+  )) %>% 
+  mutate(os_event_5year = case_when(
+    os_time < day(seconds_to_period(dyears(5)))              ~ os_event,
+    TRUE                                                     ~ 0
+  ))
 
 ```
 
@@ -134,7 +142,7 @@ met_data %>%
          BMI_recent, bmi_cat, bmi_cat2,
          smokcurrent, smoking_status,
          debulking_CA125, neoadjuvant, adjuvant,
-         vitalstatus2,
+         vitalstatus2, os_event_5year,
          coca_RE_cluster
   ) %>% 
   tbl_summary(
@@ -164,7 +172,7 @@ met_data %>%
          BMI_recent, bmi_cat, bmi_cat2,
          smokcurrent, smoking_status,
          debulking_CA125, neoadjuvant, adjuvant,
-         vitalstatus2,
+         vitalstatus2, os_event_5year,
          coca_RE_cluster
   ) %>% 
   tbl_summary(by = coca_RE_cluster,
@@ -191,14 +199,14 @@ tbl1 <- met_data %>%
   select(coca_RE_cluster,
          refage, stage_cat) %>%
   tbl_uvregression(method = survival::coxph,
-                   y = (Surv(time = met_data$os_time,
-                             event = met_data$os_event)),
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
                    exponentiate = TRUE) %>%
   bold_p(t = .05) %>% 
   add_nevent(location = "level") %>% add_n(location = "level") %>%
   bold_labels() %>% italicize_levels()
-tbl2 <- coxph(Surv(time = met_data$os_time, 
-                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat, 
+tbl2 <- coxph(Surv(time = met_data$os_time_5year, 
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat, 
               data = met_data)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
   bold_p(t = .05) %>% 
@@ -208,8 +216,8 @@ tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable*
 ```
 <!-- PH assumption -->
 <!-- ```{r} -->
-<!-- coxph(Surv(time = met_data$os_time, -->
-<!--                    event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat, -->
+<!-- coxph(Surv(time = met_data$os_time_5year, -->
+<!--                    event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat, -->
 <!--       data = met_data)  %>% -->
 <!--   cox.zph() -->
 <!-- ``` -->
@@ -223,14 +231,14 @@ tbl1 <- met_data %>%
   select(coca_RE_cluster,
          refage, stage_cat, debulking_CA125) %>%
   tbl_uvregression(method = survival::coxph,
-                   y = (Surv(time = met_data$os_time,
-                             event = met_data$os_event)),
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
                    exponentiate = TRUE) %>%
   bold_p(t = .05) %>% 
   add_nevent(location = "level") %>% add_n(location = "level") %>%
   bold_labels() %>% italicize_levels()
-tbl2 <- coxph(Surv(time = met_data$os_time, 
-                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, 
+tbl2 <- coxph(Surv(time = met_data$os_time_5year, 
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, 
               data = met_data)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
   bold_p(t = .05) %>% 
@@ -240,8 +248,8 @@ tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable*
 ```
 PH assumption
 ```{r}
-coxph(Surv(time = met_data$os_time, 
-                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, 
+coxph(Surv(time = met_data$os_time_5year, 
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, 
       data = met_data)  %>% 
   cox.zph()
 ```
@@ -250,7 +258,7 @@ coxph(Surv(time = met_data$os_time,
 
 # IV. KM
 ```{r Survival, fig.height = 7}
-ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster, 
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ coca_RE_cluster, 
                    data=met_data),
            title = "OS Analysis",
            font.main = c(20, "bold", "black"),
@@ -260,7 +268,7 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
            font.tickslab = c(16, "bold", "black"),
            size = 1.5,
 
-           xlab = "Time in months",
+           xlab = "Time in days",
            legend = "top",
            legend.title = "",
            pval = TRUE,
@@ -279,8 +287,8 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
 <!-- adj_data <- met_data %>% -->
 <!--   filter(adjuvant == "Yes") -->
 
-<!-- coxph(Surv(time = adj_data$os_time, -->
-<!--                    event = adj_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, -->
+<!-- coxph(Surv(time = adj_data$os_time_5year, -->
+<!--                    event = adj_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, -->
 <!--               data = adj_data)  %>% -->
 <!--   tbl_regression(exponentiate = TRUE) %>% -->
 <!--   bold_p(t = .05) %>% -->
@@ -294,14 +302,14 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
 distant_data <- met_data %>%
   filter(stage_cat == "Late")
 
-coxph(Surv(time = distant_data$os_time,
-                   event = distant_data$os_event) ~ coca_RE_cluster + refage + debulking_CA125,
+coxph(Surv(time = distant_data$os_time_5year,
+                   event = distant_data$os_event_5year) ~ coca_RE_cluster + refage + debulking_CA125,
               data = distant_data)  %>%
   tbl_regression(exponentiate = TRUE) %>%
   bold_p(t = .05) %>%
   add_nevent(location = "level") %>% add_n(location = "level")
 
-ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster, 
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ coca_RE_cluster, 
                    data=distant_data),
            title = "OS Analysis",
            font.main = c(20, "bold", "black"),
@@ -311,7 +319,7 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
            font.tickslab = c(16, "bold", "black"),
            size = 1.5,
 
-           xlab = "Time in months",
+           xlab = "Time in days",
            legend = "top",
            legend.title = "",
            pval = TRUE,
@@ -326,8 +334,8 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
 serous_data <- met_data %>%
   filter(histology == "Serous")
 
-coxph(Surv(time = serous_data$os_time,
-                   event = serous_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125,
+coxph(Surv(time = serous_data$os_time_5year,
+                   event = serous_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125,
               data = serous_data)  %>%
   tbl_regression(exponentiate = TRUE) %>%
   bold_p(t = .05) %>%
@@ -339,8 +347,8 @@ coxph(Surv(time = serous_data$os_time,
 <!-- black_data <- met_data %>% -->
 <!--   filter(ethnicity_dnam == "Black or african american") -->
 
-<!-- coxph(Surv(time = black_data$os_time, -->
-<!--                    event = black_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, -->
+<!-- coxph(Surv(time = black_data$os_time_5year, -->
+<!--                    event = black_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, -->
 <!--               data = black_data)  %>% -->
 <!--   tbl_regression(exponentiate = TRUE) %>% -->
 <!--   bold_p(t = .05) %>% -->
