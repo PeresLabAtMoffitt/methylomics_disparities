@@ -38,6 +38,7 @@ knitr::opts_chunk$set(echo = FALSE,
 
 ```{r library, echo = FALSE}
 library(tidyverse)
+library(labelled)
 # library(REMP)
 # library(ComplexHeatmap)
 library(gtsummary)
@@ -65,6 +66,9 @@ cluster_res_list <- read_rds(paste0(here::here(), "/clustering/MOVICS/movics_clu
 L1_imputed <- read_rds(paste0(here::here(), "/L1_imputed.rds"))
 Alu_imputed <- read_rds(paste0(here::here(), "/Alu_imputed.rds"))
 ERV_imputed <- read_rds(paste0(here::here(), "/ERV_imputed.rds"))
+
+BRCA_mutations <- read_csv(paste0(here::here(), "/ancestry_and_mutation_3_12_24.csv"))
+patient_id <- read_csv(paste0(here::here(), "/Patient ids  for BRCA and TP53 data request.csv"))
 ```
 
 
@@ -121,16 +125,130 @@ phenoclean <- phenoclean %>%
 
 ```
 
+```{r BRCA cleaning}
+BRCA_mutations <- BRCA_mutations %>% 
+  full_join(patient_id, ., by = "suid") %>% 
+  mutate(across(c(where(is.character), -Complete.Barcode), ~ str_to_lower(.))) %>% 
+  mutate(suid = as.character(suid)) %>% 
+  mutate_at(c("germline_mutation_BRCA1", "germline_mutation_BRCA2", 
+              "tumor_mutation_BRCA1", "tumor_mutation_BRCA2",
+              "germline_mutation_TP53", "tumor_mutation_TP53"), 
+            ~ case_when(
+              . == 1                                         ~ "Yes",
+              . == 2                                         ~ "No",
+              TRUE                                           ~ as.character(.)
+            )
+  ) %>% 
+  mutate(BRCA1_carrier = case_when(
+    tumor_mutation_BRCA1 == "Yes" |
+      germline_mutation_BRCA1 == "Yes"                       ~ "Yes",
+    tumor_mutation_BRCA1 == "No" &
+      germline_mutation_BRCA1 == "No"                        ~ "No"
+  )) %>% 
+  mutate(BRCA2_carrier = case_when(
+    tumor_mutation_BRCA2 == "Yes" |
+      germline_mutation_BRCA2 == "Yes"                       ~ "Yes",
+    tumor_mutation_BRCA2 == "No" &
+      germline_mutation_BRCA2 == "No"                        ~ "No"
+  )) %>% 
+  mutate(pathogenic_germline_BRCA1 = case_when(
+    germline_mutation_BRCA1 == "Yes" &
+      str_detect(germline_clinvar_BRCA1, "pathogenic")                 ~ "Yes",
+    germline_mutation_BRCA1 == "Yes" &
+      !str_detect(germline_clinvar_BRCA1, "pathogenic")                 ~ "No",
+    germline_mutation_BRCA1 == "No"                          ~ "No"
+  )) %>% 
+  mutate(pathogenic_germline_BRCA2 = case_when(
+    germline_mutation_BRCA2 == "Yes" &
+      str_detect(germline_clinvar_BRCA2, "pathogenic")                 ~ "Yes",
+    germline_mutation_BRCA2 == "Yes" &
+      !str_detect(germline_clinvar_BRCA2, "pathogenic")                 ~ "No",
+    germline_mutation_BRCA2 == "No"                          ~ "No"
+  )) %>% 
+  mutate(pathogenic_tumor_BRCA1 = case_when(
+    tumor_mutation_BRCA1 == "Yes" &
+      str_detect(tumor_clinvar_BRCA1, "pathogenic")                    ~ "Yes",
+    tumor_mutation_BRCA1 == "Yes" &
+      !str_detect(tumor_clinvar_BRCA1, "pathogenic")                    ~ "No",
+    tumor_mutation_BRCA1 == "No"                             ~ "No"
+  )) %>% 
+  mutate(pathogenic_tumor_BRCA2 = case_when(
+    tumor_mutation_BRCA2 == "Yes" &
+      str_detect(tumor_clinvar_BRCA2, "pathogenic")                    ~ "Yes",
+    tumor_mutation_BRCA2 == "Yes" &
+      !str_detect(tumor_clinvar_BRCA2, "pathogenic")                    ~ "No",
+    tumor_mutation_BRCA2 == "No"                             ~ "No"
+  )) %>% 
+  mutate(pathogenic_germline_TP53 = case_when(
+    germline_mutation_TP53 == "Yes" &
+      str_detect(germline_clinvar_TP53, "pathogenic")        ~ "Yes",
+    germline_mutation_TP53 == "Yes" &
+      !str_detect(germline_clinvar_TP53, "pathogenic")       ~ "No",
+    germline_mutation_TP53 == "No"                           ~ "No"
+  )) %>% 
+  mutate(pathogenic_tumor_TP53 = case_when(
+    tumor_mutation_TP53 == "Yes" &
+      str_detect(tumor_clinvar_TP53, "pathogenic")           ~ "Yes",
+    tumor_mutation_TP53 == "Yes" &
+      !str_detect(tumor_clinvar_TP53, "pathogenic")          ~ "No",
+    tumor_mutation_TP53 == "No"                              ~ "No"
+  )) %>%
+  # mutate(germline_BRCA12 = case_when(
+  #   germline_mutation_BRCA1 == "Yes" |
+  #     germline_mutation_BRCA2 == "Yes"                       ~ "No",
+  #   germline_mutation_BRCA1 == "No" &
+  #     germline_mutation_BRCA2 == "No"                        ~ "No"
+  # )) %>% 
+  # mutate(tumor_BRCA12 = case_when(
+  #   tumor_mutation_BRCA1 == "Yes" |
+  #     tumor_mutation_BRCA2 == "Yes"                          ~ "No",
+  #   tumor_mutation_BRCA1 == "No" &
+  #     tumor_mutation_BRCA2 == "No"                           ~ "No"
+  # )) %>% 
+  mutate_at(c("germline_mutation_BRCA1", "germline_mutation_BRCA2", 
+              "tumor_mutation_BRCA1", "tumor_mutation_BRCA2",
+              "germline_mutation_TP53", "tumor_mutation_TP53",
+              "pathogenic_germline_BRCA1", "pathogenic_germline_BRCA2",
+              "pathogenic_tumor_BRCA1", "pathogenic_tumor_BRCA2",
+              "pathogenic_germline_TP53", "pathogenic_tumor_TP53",
+              "BRCA1_carrier", "BRCA2_carrier"),
+            ~ factor(., levels = c("No",
+                                   "Yes")))
+```
 
 ```{r prep data}
 met_data <- phenoclean %>% 
   inner_join(., coca_cluster_results,
             by = "patient_id") %>% 
-  mutate(across(where(is.character), ~ str_to_sentence(.))) %>% 
+  left_join(., BRCA_mutations, 
+            by = c("patient_id" = "Complete.Barcode", "suid")) %>% 
+  mutate(across(c(where(is.character), -patient_id), ~ str_to_sentence(.))) %>% 
   mutate(coca_RE_cluster = as.character(coca_RE_cluster))
+
+write_rds(met_data, "met_data.rds")
 ```
 
-
+```{r Labeling}
+var_label(met_data) <- list(refage = "Age at diagnosis",
+                            stage_cat = "Stage",
+                            debulking_CA125 = "Debulking Status", 
+                            neoadjuvant = "Neoadjuvant chemotherapy",
+                            adjuvant = "Adjuvant chemotherapy",
+                            smokcurrent = "Current smoking status",
+                            germline_mutation_BRCA1 = "BRCA1 germline carrier", 
+                            germline_mutation_BRCA2 = "BRCA2 germline carrier", 
+                            tumor_mutation_BRCA1 = "BRCA1 tumor carrier", 
+                            tumor_mutation_BRCA2 = "BRCA2 tumor carrier",
+                            germline_mutation_TP53 = "TP53 germline carrier", 
+                            tumor_mutation_TP53 = "TP53 tumor carrier",
+                            pathogenic_germline_BRCA1 = "pathogenic BRCA1 germline carrier", 
+                            pathogenic_germline_BRCA2 = "pathogenic BRCA2 germline carrier",
+                            pathogenic_tumor_BRCA1 = "pathogenic BRCA1 tumor carrier", 
+                            pathogenic_tumor_BRCA2 = "pathogenic BRCA2 tumor carrier",
+                            pathogenic_germline_TP53 = "pathogenic TP53 germline carrier", 
+                            pathogenic_tumor_TP53 = "pathogenic TP53 tumor carrier",
+                            coca_RE_cluster = "COCA cluster")
+```
 
 # I. Table 1. Patient characteristics overall
 ```{r}
@@ -143,20 +261,34 @@ met_data %>%
          smokcurrent, smoking_status,
          debulking_CA125, neoadjuvant, adjuvant,
          vitalstatus2, os_event_5year,
+         os_time, os_time_5year,
          coca_RE_cluster
   ) %>% 
   tbl_summary(
     statistic = list(all_continuous() ~ "{mean} ({sd})"),
-    label = list(refage ~ "Age at diagnosis",
-                 debulking_CA125 ~ "Debulking Status", 
-                 neoadjuvant ~ "Neoadjuvant chemotherapy",
-                 adjuvant ~ "Adjuvant chemotherapy",
-                 smokcurrent ~ "Current smoking status"
-    ),
+    # label = list(refage ~ "Age at diagnosis",
+    #              debulking_CA125 ~ "Debulking Status", 
+    #              neoadjuvant ~ "Neoadjuvant chemotherapy",
+    #              adjuvant ~ "Adjuvant chemotherapy",
+    #              smokcurrent ~ "Current smoking status"
+    # ),
     type = list(c(neoadjuvant, adjuvant) ~ "categorical"),
     digits = list(all_continuous() ~ 1)) %>% 
-  add_stat_label() %>%
+  bold_labels() %>% add_stat_label() %>%
   modify_header(list(label ~ "**Patient characteristics**", 
+                     all_stat_cols() ~ "**{level}**, N = {n}"))
+
+met_data %>% 
+  select(contains("BRCA1"),
+         contains("BRCA2"),
+         contains("TP53")
+  ) %>% 
+  tbl_summary(
+    statistic = list(all_continuous() ~ "{mean} ({sd})"),
+    type = everything() ~ "categorical",
+    digits = list(all_continuous() ~ 1)) %>% 
+  bold_labels() %>% add_stat_label() %>%
+  modify_header(list(label ~ "**Mutations characteristics**", 
                      all_stat_cols() ~ "**{level}**, N = {n}"))
 ```
 <br>
@@ -177,18 +309,34 @@ met_data %>%
   ) %>% 
   tbl_summary(by = coca_RE_cluster,
               statistic = list(all_continuous() ~ "{mean} ({sd})"),
-              label = list(refage ~ "Age at diagnosis",
-                           debulking_CA125 ~ "Debulking Status", 
-                           neoadjuvant ~ "Neoadjuvant chemotherapy",
-                           adjuvant ~ "Adjuvant chemotherapy",
-                           smokcurrent ~ "Current smoking status"
-              ),
+              # label = list(refage ~ "Age at diagnosis",
+              #              debulking_CA125 ~ "Debulking Status", 
+              #              neoadjuvant ~ "Neoadjuvant chemotherapy",
+              #              adjuvant ~ "Adjuvant chemotherapy",
+              #              smokcurrent ~ "Current smoking status"
+              # ),
               type = list(c(neoadjuvant, adjuvant) ~ "categorical"),
               digits = list(all_continuous() ~ 1)) %>%
   bold_labels() %>% add_stat_label() %>% 
   add_p() %>% bold_p(t=.05) %>% add_overall() %>% 
   modify_spanning_header(c(stat_1, stat_2) ~ "COCA cluster") %>% 
   modify_header(list(label ~ "**Patient characteristics**"))
+
+met_data %>% 
+  select(contains("BRCA1"),
+         contains("BRCA2"),
+         contains("TP53"),
+         coca_RE_cluster
+  ) %>% 
+  tbl_summary(by = coca_RE_cluster,
+    statistic = list(all_continuous() ~ "{mean} ({sd})"),
+    type = everything() ~ "categorical",
+    digits = list(all_continuous() ~ 1)) %>% 
+  bold_labels() %>% add_stat_label() %>%
+  add_p() %>% bold_p(t=.05) %>% add_overall() %>% 
+  modify_spanning_header(c(stat_1, stat_2) ~ "COCA cluster") %>% 
+  modify_header(list(label ~ "**Mutations characteristics**", 
+                     all_stat_cols() ~ "**{level}**, N = {n}"))
 ```
 
 # III. Adjusted hazard ratios and 95% confidence intervals
@@ -202,14 +350,14 @@ tbl1 <- met_data %>%
                    y = (Surv(time = met_data$os_time_5year,
                              event = met_data$os_event_5year)),
                    exponentiate = TRUE) %>%
-  bold_p(t = .05) %>% 
+  bold_p(t = .05) %>%
   add_nevent(location = "level") %>% add_n(location = "level") %>%
   bold_labels() %>% italicize_levels()
-tbl2 <- coxph(Surv(time = met_data$os_time_5year, 
-                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat, 
-              data = met_data)  %>% 
-  tbl_regression(exponentiate = TRUE) %>% 
-  bold_p(t = .05) %>% 
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
   add_nevent(location = "level") %>% add_n(location = "level")
 
 tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
@@ -234,31 +382,352 @@ tbl1 <- met_data %>%
                    y = (Surv(time = met_data$os_time_5year,
                              event = met_data$os_event_5year)),
                    exponentiate = TRUE) %>%
-  bold_p(t = .05) %>% 
+  bold_p(t = .05) %>%
   add_nevent(location = "level") %>% add_n(location = "level") %>%
   bold_labels() %>% italicize_levels()
-tbl2 <- coxph(Surv(time = met_data$os_time_5year, 
-                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, 
-              data = met_data)  %>% 
-  tbl_regression(exponentiate = TRUE) %>% 
-  bold_p(t = .05) %>% 
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
   add_nevent(location = "level") %>% add_n(location = "level")
 
 tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
 ```
 PH assumption
 ```{r}
-coxph(Surv(time = met_data$os_time_5year, 
-                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, 
-      data = met_data)  %>% 
+coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125,
+      data = met_data)  %>%
   cox.zph()
 ```
 <br>
 <br>
 
+## 3. HR adjusted by BRCA1
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, germline_mutation_BRCA1) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + germline_mutation_BRCA1,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, pathogenic_germline_BRCA1) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + pathogenic_germline_BRCA1,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, tumor_mutation_BRCA1) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + tumor_mutation_BRCA1,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, pathogenic_tumor_BRCA1) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + pathogenic_tumor_BRCA1,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+
+## 4. HR adjusted by BRCA2
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, germline_mutation_BRCA2) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + germline_mutation_BRCA2,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, pathogenic_germline_BRCA2) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + pathogenic_germline_BRCA2,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, tumor_mutation_BRCA2) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + tumor_mutation_BRCA2,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, pathogenic_tumor_BRCA2) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + pathogenic_tumor_BRCA2,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+
+## HR adjusted by BRCA1 + BRCA2
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, germline_mutation_BRCA1, 
+         germline_mutation_BRCA2) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + 
+                germline_mutation_BRCA1 + germline_mutation_BRCA2,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, tumor_mutation_BRCA1, 
+         tumor_mutation_BRCA2) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + 
+                tumor_mutation_BRCA1 + tumor_mutation_BRCA2,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+
+Adjusted by BRCA1 overall + BRCA2 overall
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, BRCA1_carrier, 
+         BRCA2_carrier) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + 
+                BRCA1_carrier + BRCA2_carrier,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+
+## 5. HR adjusted by TP53
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, germline_mutation_TP53) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + germline_mutation_TP53,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, pathogenic_germline_TP53) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + pathogenic_germline_TP53,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, tumor_mutation_TP53) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + tumor_mutation_TP53,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, pathogenic_tumor_TP53) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_5year,
+                             event = met_data$os_event_5year)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + pathogenic_tumor_TP53,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
+
+# Forest plot
+
 # IV. KM
 ```{r Survival, fig.height = 7}
-ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ coca_RE_cluster, 
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ coca_RE_cluster,
                    data=met_data),
            title = "OS Analysis",
            font.main = c(20, "bold", "black"),
@@ -306,10 +775,11 @@ coxph(Surv(time = distant_data$os_time_5year,
                    event = distant_data$os_event_5year) ~ coca_RE_cluster + refage + debulking_CA125,
               data = distant_data)  %>%
   tbl_regression(exponentiate = TRUE) %>%
+  bold_labels() %>% italicize_levels() %>%
   bold_p(t = .05) %>%
   add_nevent(location = "level") %>% add_n(location = "level")
 
-ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ coca_RE_cluster, 
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ coca_RE_cluster,
                    data=distant_data),
            title = "OS Analysis",
            font.main = c(20, "bold", "black"),
@@ -338,6 +808,7 @@ coxph(Surv(time = serous_data$os_time_5year,
                    event = serous_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125,
               data = serous_data)  %>%
   tbl_regression(exponentiate = TRUE) %>%
+  bold_labels() %>% italicize_levels() %>%
   bold_p(t = .05) %>%
   add_nevent(location = "level") %>% add_n(location = "level")
 ```
