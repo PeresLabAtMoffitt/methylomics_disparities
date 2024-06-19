@@ -65,6 +65,12 @@ cluster_res_list <- read_rds(paste0(here::here(), "/clustering/MOVICS/movics_clu
 L1_imputed <- read_rds(paste0(here::here(), "/L1_imputed.rds"))
 Alu_imputed <- read_rds(paste0(here::here(), "/Alu_imputed.rds"))
 ERV_imputed <- read_rds(paste0(here::here(), "/ERV_imputed.rds"))
+
+BRCA_mutations <- read_csv(paste0(here::here(), "/ancestry_and_mutation_3_12_24.csv"))
+patient_id <- read_csv(paste0(here::here(), "/Patient ids  for BRCA and TP53 data request.csv"))
+
+survival_time_Nov2023 <- read_csv(paste0(here::here(), "/survival_time_Nov2023_2024-06-19.csv")) %>% 
+  mutate(suid = as.character(suid))
 ```
 
 
@@ -105,24 +111,119 @@ phenoclean <- phenoclean %>%
     str_detect(smokcurrent, "current|former") ~ "Ever",
     smokcurrent == "never smoker"             ~ "Never"
   )) %>% 
-  mutate(os_event = case_when(
-    vitalstatus == 1                ~ 0,
-    vitalstatus == 2                ~ 1
-  )) %>% 
-  rename(os_time = timelastfu)
+  # Rename older vital status but keep in data
+  rename(vitalstatus_2022 = vitalstatus,
+         timelastfu_2022 = timelastfu) %>% 
+  # Create survival var
+  left_join(., survival_time_Nov2023, by = "suid") %>% 
+  mutate(vitalstatus = case_when(
+    os_event == 0                            ~ "Alive",
+    os_event == 1                            ~ "Deceased",
+    TRUE                                     ~ NA_character_
+  ))
 
 ```
 
+```{r BRCA cleaning}
+BRCA_mutations <- BRCA_mutations %>% 
+  full_join(patient_id, ., by = "suid") %>% 
+  mutate(across(c(where(is.character), -Complete.Barcode), ~ str_to_lower(.))) %>% 
+  mutate(suid = as.character(suid)) %>% 
+  mutate_at(c("germline_mutation_BRCA1", "germline_mutation_BRCA2", 
+              "tumor_mutation_BRCA1", "tumor_mutation_BRCA2",
+              "germline_mutation_TP53", "tumor_mutation_TP53"), 
+            ~ case_when(
+              . == 1                                         ~ "Yes",
+              . == 2                                         ~ "No",
+              TRUE                                           ~ as.character(.)
+            )
+  ) %>% 
+  mutate(BRCA1_carrier = case_when(
+    tumor_mutation_BRCA1 == "Yes" |
+      germline_mutation_BRCA1 == "Yes"                       ~ "Yes",
+    tumor_mutation_BRCA1 == "No" &
+      germline_mutation_BRCA1 == "No"                        ~ "No"
+  )) %>% 
+  mutate(BRCA2_carrier = case_when(
+    tumor_mutation_BRCA2 == "Yes" |
+      germline_mutation_BRCA2 == "Yes"                       ~ "Yes",
+    tumor_mutation_BRCA2 == "No" &
+      germline_mutation_BRCA2 == "No"                        ~ "No"
+  )) %>% 
+  mutate(pathogenic_germline_BRCA1 = case_when(
+    germline_mutation_BRCA1 == "Yes" &
+      str_detect(germline_clinvar_BRCA1, "pathogenic")                 ~ "Yes",
+    germline_mutation_BRCA1 == "Yes" &
+      !str_detect(germline_clinvar_BRCA1, "pathogenic")                 ~ "No",
+    germline_mutation_BRCA1 == "No"                          ~ "No"
+  )) %>% 
+  mutate(pathogenic_germline_BRCA2 = case_when(
+    germline_mutation_BRCA2 == "Yes" &
+      str_detect(germline_clinvar_BRCA2, "pathogenic")                 ~ "Yes",
+    germline_mutation_BRCA2 == "Yes" &
+      !str_detect(germline_clinvar_BRCA2, "pathogenic")                 ~ "No",
+    germline_mutation_BRCA2 == "No"                          ~ "No"
+  )) %>% 
+  mutate(pathogenic_tumor_BRCA1 = case_when(
+    tumor_mutation_BRCA1 == "Yes" &
+      str_detect(tumor_clinvar_BRCA1, "pathogenic")                    ~ "Yes",
+    tumor_mutation_BRCA1 == "Yes" &
+      !str_detect(tumor_clinvar_BRCA1, "pathogenic")                    ~ "No",
+    tumor_mutation_BRCA1 == "No"                             ~ "No"
+  )) %>% 
+  mutate(pathogenic_tumor_BRCA2 = case_when(
+    tumor_mutation_BRCA2 == "Yes" &
+      str_detect(tumor_clinvar_BRCA2, "pathogenic")                    ~ "Yes",
+    tumor_mutation_BRCA2 == "Yes" &
+      !str_detect(tumor_clinvar_BRCA2, "pathogenic")                    ~ "No",
+    tumor_mutation_BRCA2 == "No"                             ~ "No"
+  )) %>% 
+  mutate(pathogenic_germline_TP53 = case_when(
+    germline_mutation_TP53 == "Yes" &
+      str_detect(germline_clinvar_TP53, "pathogenic")        ~ "Yes",
+    germline_mutation_TP53 == "Yes" &
+      !str_detect(germline_clinvar_TP53, "pathogenic")       ~ "No",
+    germline_mutation_TP53 == "No"                           ~ "No"
+  )) %>% 
+  mutate(pathogenic_tumor_TP53 = case_when(
+    tumor_mutation_TP53 == "Yes" &
+      str_detect(tumor_clinvar_TP53, "pathogenic")           ~ "Yes",
+    tumor_mutation_TP53 == "Yes" &
+      !str_detect(tumor_clinvar_TP53, "pathogenic")          ~ "No",
+    tumor_mutation_TP53 == "No"                              ~ "No"
+  )) %>%
+  # mutate(germline_BRCA12 = case_when(
+  #   germline_mutation_BRCA1 == "Yes" |
+  #     germline_mutation_BRCA2 == "Yes"                       ~ "No",
+  #   germline_mutation_BRCA1 == "No" &
+  #     germline_mutation_BRCA2 == "No"                        ~ "No"
+  # )) %>% 
+  # mutate(tumor_BRCA12 = case_when(
+  #   tumor_mutation_BRCA1 == "Yes" |
+  #     tumor_mutation_BRCA2 == "Yes"                          ~ "No",
+  #   tumor_mutation_BRCA1 == "No" &
+  #     tumor_mutation_BRCA2 == "No"                           ~ "No"
+  # )) %>% 
+  mutate_at(c("germline_mutation_BRCA1", "germline_mutation_BRCA2", 
+              "tumor_mutation_BRCA1", "tumor_mutation_BRCA2",
+              "germline_mutation_TP53", "tumor_mutation_TP53",
+              "pathogenic_germline_BRCA1", "pathogenic_germline_BRCA2",
+              "pathogenic_tumor_BRCA1", "pathogenic_tumor_BRCA2",
+              "pathogenic_germline_TP53", "pathogenic_tumor_TP53",
+              "BRCA1_carrier", "BRCA2_carrier"),
+            ~ factor(., levels = c("No",
+                                   "Yes")))
+```
 
 ```{r prep data}
 met_data <- phenoclean %>% 
   inner_join(., coca_cluster_results,
             by = "patient_id") %>% 
+  left_join(., BRCA_mutations, 
+            by = c("patient_id" = "Complete.Barcode", "suid")) %>% 
   mutate(across(where(is.character), ~ str_to_sentence(.))) %>% 
   mutate(coca_RE_cluster = as.character(coca_RE_cluster))
 ```
-
-
 
 # I. Table 1. Patient characteristics overall
 ```{r}
@@ -191,13 +292,13 @@ tbl1 <- met_data %>%
   select(coca_RE_cluster,
          refage, stage_cat) %>%
   tbl_uvregression(method = survival::coxph,
-                   y = (Surv(time = met_data$os_time,
+                   y = (Surv(time = met_data$os_time_months,
                              event = met_data$os_event)),
                    exponentiate = TRUE) %>%
   bold_p(t = .05) %>% 
   add_nevent(location = "level") %>% add_n(location = "level") %>%
   bold_labels() %>% italicize_levels()
-tbl2 <- coxph(Surv(time = met_data$os_time, 
+tbl2 <- coxph(Surv(time = met_data$os_time_months, 
                    event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat, 
               data = met_data)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
@@ -206,13 +307,13 @@ tbl2 <- coxph(Surv(time = met_data$os_time,
 
 tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
 ```
-<!-- PH assumption -->
-<!-- ```{r} -->
-<!-- coxph(Surv(time = met_data$os_time, -->
-<!--                    event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat, -->
-<!--       data = met_data)  %>% -->
-<!--   cox.zph() -->
-<!-- ``` -->
+PH assumption
+```{r}
+coxph(Surv(time = met_data$os_time_months,
+                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat,
+      data = met_data)  %>%
+  cox.zph()
+```
 <br>
 <br>
 
@@ -223,13 +324,13 @@ tbl1 <- met_data %>%
   select(coca_RE_cluster,
          refage, stage_cat, debulking_CA125) %>%
   tbl_uvregression(method = survival::coxph,
-                   y = (Surv(time = met_data$os_time,
+                   y = (Surv(time = met_data$os_time_months,
                              event = met_data$os_event)),
                    exponentiate = TRUE) %>%
   bold_p(t = .05) %>% 
   add_nevent(location = "level") %>% add_n(location = "level") %>%
   bold_labels() %>% italicize_levels()
-tbl2 <- coxph(Surv(time = met_data$os_time, 
+tbl2 <- coxph(Surv(time = met_data$os_time_months, 
                    event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, 
               data = met_data)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
@@ -240,7 +341,7 @@ tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable*
 ```
 PH assumption
 ```{r}
-coxph(Surv(time = met_data$os_time, 
+coxph(Surv(time = met_data$os_time_months, 
                    event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, 
       data = met_data)  %>% 
   cox.zph()
@@ -250,7 +351,7 @@ coxph(Surv(time = met_data$os_time,
 
 # IV. KM
 ```{r Survival, fig.height = 7}
-ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster, 
+ggsurvplot(survfit(Surv(os_time_months, os_event) ~ coca_RE_cluster, 
                    data=met_data),
            title = "OS Analysis",
            font.main = c(20, "bold", "black"),
@@ -260,14 +361,14 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
            font.tickslab = c(16, "bold", "black"),
            size = 1.5,
 
-           xlab = "Time in months",
+           xlab = "Time (months)",
            legend = "top",
            legend.title = "",
            pval = TRUE,
            conf.int = FALSE,
            # Censor
            censor = TRUE
-) + guides(colour = guide_legend(ncol = 1))
+) #+ guides(colour = guide_legend(ncol = 1))
 ```
 <br>
 <br>
@@ -279,7 +380,7 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
 <!-- adj_data <- met_data %>% -->
 <!--   filter(adjuvant == "Yes") -->
 
-<!-- coxph(Surv(time = adj_data$os_time, -->
+<!-- coxph(Surv(time = adj_data$os_time_months, -->
 <!--                    event = adj_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, -->
 <!--               data = adj_data)  %>% -->
 <!--   tbl_regression(exponentiate = TRUE) %>% -->
@@ -294,14 +395,14 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
 distant_data <- met_data %>%
   filter(stage_cat == "Late")
 
-coxph(Surv(time = distant_data$os_time,
+coxph(Surv(time = distant_data$os_time_months,
                    event = distant_data$os_event) ~ coca_RE_cluster + refage + debulking_CA125,
               data = distant_data)  %>%
   tbl_regression(exponentiate = TRUE) %>%
   bold_p(t = .05) %>%
   add_nevent(location = "level") %>% add_n(location = "level")
 
-ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster, 
+ggsurvplot(survfit(Surv(os_time_months, os_event) ~ coca_RE_cluster, 
                    data=distant_data),
            title = "OS Analysis",
            font.main = c(20, "bold", "black"),
@@ -311,14 +412,14 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
            font.tickslab = c(16, "bold", "black"),
            size = 1.5,
 
-           xlab = "Time in months",
+           xlab = "Time (months)",
            legend = "top",
            legend.title = "",
            pval = TRUE,
            conf.int = FALSE,
            # Censor
            censor = TRUE
-) + guides(colour = guide_legend(ncol = 1))
+) #+ guides(colour = guide_legend(ncol = 1))
 ```
 
 ## 2. Sensitivity analysis in patients with serous histology
@@ -326,7 +427,7 @@ ggsurvplot(survfit(Surv(os_time, os_event) ~ coca_RE_cluster,
 serous_data <- met_data %>%
   filter(histology == "Serous")
 
-coxph(Surv(time = serous_data$os_time,
+coxph(Surv(time = serous_data$os_time_months,
                    event = serous_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125,
               data = serous_data)  %>%
   tbl_regression(exponentiate = TRUE) %>%
@@ -339,7 +440,7 @@ coxph(Surv(time = serous_data$os_time,
 <!-- black_data <- met_data %>% -->
 <!--   filter(ethnicity_dnam == "Black or african american") -->
 
-<!-- coxph(Surv(time = black_data$os_time, -->
+<!-- coxph(Surv(time = black_data$os_time_months, -->
 <!--                    event = black_data$os_event) ~ coca_RE_cluster + refage + stage_cat + debulking_CA125, -->
 <!--               data = black_data)  %>% -->
 <!--   tbl_regression(exponentiate = TRUE) %>% -->
@@ -347,7 +448,29 @@ coxph(Surv(time = serous_data$os_time,
 <!--   add_nevent(location = "level") %>% add_n(location = "level") -->
 <!-- ``` -->
 
+# Adjusted by BRCA1 overall + BRCA2 overall
+```{r}
+tbl1 <- met_data %>%
+  select(coca_RE_cluster,
+         refage, stage_cat, BRCA1_carrier, 
+         BRCA2_carrier) %>%
+  tbl_uvregression(method = survival::coxph,
+                   y = (Surv(time = met_data$os_time_months,
+                             event = met_data$os_event)),
+                   exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  bold_labels() %>% italicize_levels()
+tbl2 <- coxph(Surv(time = met_data$os_time_months,
+                   event = met_data$os_event) ~ coca_RE_cluster + refage + stage_cat + 
+                BRCA1_carrier + BRCA2_carrier,
+              data = met_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
 
+tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+```
 
 
 

@@ -69,6 +69,9 @@ ERV_imputed <- read_rds(paste0(here::here(), "/ERV_imputed.rds"))
 
 BRCA_mutations <- read_csv(paste0(here::here(), "/ancestry_and_mutation_3_12_24.csv"))
 patient_id <- read_csv(paste0(here::here(), "/Patient ids  for BRCA and TP53 data request.csv"))
+
+survival_time_Nov2023 <- read_csv(paste0(here::here(), "/survival_time_Nov2023_2024-06-19.csv")) %>% 
+  mutate(suid = as.character(suid))
 ```
 
 
@@ -109,18 +112,25 @@ phenoclean <- phenoclean %>%
     str_detect(smokcurrent, "current|former") ~ "Ever",
     smokcurrent == "never smoker"             ~ "Never"
   )) %>% 
-  mutate(os_event = case_when(
-    vitalstatus == 1                ~ 0,
-    vitalstatus == 2                ~ 1
+  # Rename older vital status but keep in data
+  rename(vitalstatus_2022 = vitalstatus,
+         timelastfu_2022 = timelastfu) %>% 
+  # Create survival var
+  left_join(., survival_time_Nov2023, by = "suid") %>% 
+  mutate(vitalstatus = case_when(
+    os_event == 0                            ~ "Alive",
+    os_event == 1                            ~ "Deceased",
+    TRUE                                     ~ NA_character_
   )) %>% 
-  mutate(os_time = timelastfu) %>% 
   mutate(os_time_5year = case_when(
-    os_time < day(seconds_to_period(dyears(5)))              ~ os_time,
-    TRUE                                                     ~ day(seconds_to_period(dyears(5)))
+    os_time_months <= 5 * 12      ~ os_time_months,
+    os_time_months > 5 * 12       ~ 60,
+    TRUE                                                       ~ NA_real_
   )) %>% 
   mutate(os_event_5year = case_when(
-    os_time < day(seconds_to_period(dyears(5)))              ~ os_event,
-    TRUE                                                     ~ 0
+    os_time_months <= 60        ~ os_event,
+    os_time_months > 60         ~ 0,
+    TRUE                        ~ NA_real_
   ))
 
 ```
@@ -261,7 +271,7 @@ met_data %>%
          smokcurrent, smoking_status,
          debulking_CA125, neoadjuvant, adjuvant,
          vitalstatus2, os_event_5year,
-         os_time, os_time_5year,
+         os_time_months, os_time_5year,
          coca_RE_cluster
   ) %>% 
   tbl_summary(
@@ -362,13 +372,13 @@ tbl2 <- coxph(Surv(time = met_data$os_time_5year,
 
 tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
 ```
-<!-- PH assumption -->
-<!-- ```{r} -->
-<!-- coxph(Surv(time = met_data$os_time_5year, -->
-<!--                    event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat, -->
-<!--       data = met_data)  %>% -->
-<!--   cox.zph() -->
-<!-- ``` -->
+PH assumption
+```{r}
+coxph(Surv(time = met_data$os_time_5year,
+                   event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat,
+      data = met_data)  %>%
+  cox.zph()
+```
 <br>
 <br>
 
@@ -737,14 +747,14 @@ ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ coca_RE_cluster,
            font.tickslab = c(16, "bold", "black"),
            size = 1.5,
 
-           xlab = "Time in days",
+           xlab = "Time (months)",
            legend = "top",
            legend.title = "",
            pval = TRUE,
            conf.int = FALSE,
            # Censor
            censor = TRUE
-) + guides(colour = guide_legend(ncol = 1))
+) #+ guides(colour = guide_legend(ncol = 1))
 ```
 <br>
 <br>
@@ -789,14 +799,14 @@ ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ coca_RE_cluster,
            font.tickslab = c(16, "bold", "black"),
            size = 1.5,
 
-           xlab = "Time in days",
+           xlab = "Time (months)",
            legend = "top",
            legend.title = "",
            pval = TRUE,
            conf.int = FALSE,
            # Censor
            censor = TRUE
-) + guides(colour = guide_legend(ncol = 1))
+) #+ guides(colour = guide_legend(ncol = 1))
 ```
 
 ## 2. Sensitivity analysis in patients with serous histology

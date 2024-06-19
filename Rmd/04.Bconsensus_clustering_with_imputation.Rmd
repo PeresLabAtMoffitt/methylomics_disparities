@@ -1,17 +1,21 @@
 ---
 title: "Bayesian Consensus Clustering and More - with imputation"
 author: "Christelle Colin-Leitzinger"
-date: '`r Sys.Date()`'
-output: 
+date: "`r Sys.Date()`"
+output:
+  word_document:
+    toc: yes
   html_document:
-    toc: true
-    toc_float: true
-    toc_collapsed: false
+    toc: yes
+    toc_float: yes
+    toc_collapsed: no
     theme: united
     code_folding: hide
     highlight: pygments
     df_print: paged
-editor_options: 
+  pdf_document:
+    toc: yes
+editor_options:
   chunk_output_type: console
 ---
 
@@ -868,6 +872,7 @@ plot_cluster_mvalue <- getStdiz(data = lapply(cluster_data_mvalue, head, 1000),
                                 halfwidth  = c(NA,NA,NA), # no truncation 
                                 centerFlag = c(T,T,T), # center 
                                 scaleFlag  = c(T,T,T)) # scale 
+write_rds(plot_cluster, "plot_cluster.rds")
 ```
 
 ### NEMO
@@ -879,7 +884,7 @@ plot_cluster_mvalue <- getStdiz(data = lapply(cluster_data_mvalue, head, 1000),
 
 getMoHeatmap(data          = plot_cluster,
              row.title     = c("L1_dat","Alu_dat","ERV_dat"),
-             is.binary     = c(F,F,F), # the 4th data is mutation which is binary
+             is.binary     = c(F,F,F), 
              legend.name   = c("L1_dat","Alu_dat","ERV_dat"),
              clust.res     = cluster_res_list$NEMO$clust.res, # cluster results
              clust.dend    = cluster_res_list$NEMO$clust.dend, # show dendrogram for samples
@@ -892,7 +897,7 @@ getMoHeatmap(data          = plot_cluster,
 
 getMoHeatmap(data          = plot_cluster_mvalue,
              row.title     = c("L1_dat","Alu_dat","ERV_dat"),
-             is.binary     = c(F,F,F), # the 4th data is mutation which is binary
+             is.binary     = c(F,F,F), 
              legend.name   = c("L1_dat","Alu_dat","ERV_dat"),
              clust.res     = cluster_res_list$NEMO$clust.res, # cluster results
              clust.dend    = cluster_res_list$NEMO$clust.dend, # show dendrogram for samples
@@ -1281,3 +1286,27 @@ getMoHeatmap(data          = plot_cluster_mvalue,
              annColors     = annColors, # annotation color
              fig.name      = "Comprehensive of COCA M value_with_batches_08032023")
 ```
+
+B value with mutations
+```{r}
+
+
+
+
+
+getMoHeatmap(data          = plot_cluster,
+             row.title     = c("L1_dat","Alu_dat","ERV_dat"),
+             is.binary     = c(F,F,F),
+             legend.name   = c("L1_dat","Alu_dat","ERV_dat"),
+             clust.res     = cluster_res_list$COCA$clust.res, 
+             clust.dend    = NULL, 
+             color         = list(c("#0000FF", "white"  , "#FF3C38"),
+                                  c("#0000FF", "white"  , "#FF0000"),
+                                  c("#0000FF", "white"  , "#FF0000")),
+             width         = 10, 
+             height        = 5, 
+             annCol        = annCol, # annotation for samples
+             annColors     = annColors, # annotation color
+             fig.name      = "Heatmap of BCC_with_gpe_041022024")
+```
+
