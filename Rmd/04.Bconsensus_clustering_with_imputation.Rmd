@@ -1059,6 +1059,10 @@ getMoHeatmap(data          = plot_cluster_mvalue,
 a <- bayesclus %>% 
   rename("patient_id" = "samID") %>% 
   select(samID, overall_bcc) %>% 
+  mutate(overall_bcc = case_when(
+    overall_bcc == 1 ~ 2,
+    overall_bcc == 2 ~ 1
+  )) %>% 
   full_join(.,cluster_res_list$iClusterBayes$clust.res %>% 
               as_tibble() %>% 
               rename("clust" = "iClusterBayes")) %>% 
