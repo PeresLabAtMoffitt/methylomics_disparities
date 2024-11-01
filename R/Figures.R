@@ -152,8 +152,9 @@ mdsPlot(beta, numPositions = 1000,
         pal = c(pal), 
         # xlim = c(-8, 8),
         # ylim = c(-7, 9),
-        legendPos = NULL, 
+        legendPos = "topright", 
         legendNCol = 1)
+title(xlab = "Dimension 1", ylab = "Dimension 2")
 # ggsave("Figure S1 batch-minfi with legend.pdf", # Doesn't work, need to extract h = 6, w = 7
 #        width = 4,
 #        height = 10,
