@@ -1,0 +1,596 @@
+---
+title: "Comparison COCA vs other clustering methods in the analysis - 5 years survival"
+author: "Christelle Colin-Leitzinger"
+date: '`r Sys.Date()`'
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: false
+    theme: united
+    highlight: pygments
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+
+.figure {
+   margin-top: 25px;
+   margin-bottom: 100px;
+}
+
+table {
+    margin-top: 10px;
+    margin-bottom: 25px;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      cache = FALSE,
+                      fig.align='center'
+                      )
+```
+
+```{r library, echo = FALSE}
+library(tidyverse)
+library(labelled)
+# library(REMP)
+# library(ComplexHeatmap)
+library(gtsummary)
+library(survival)
+library(survminer)
+theme_gtsummary_compact()
+theme_set(theme_classic())
+```
+
+<style>
+div.darkblue { background-color:#0099CC; border-radius: 5px; padding: 20px; font-size: 38px}
+</style>
+<div class = "blue">
+
+<span style="color: white;">Retrotransposons analysis in AACES and NCOCS data</span>
+
+</div>
+<br>
+
+```{r load}
+load(paste0(here::here(), "/cleaned_07082022.rda"))
+
+cluster_res_list <- read_rds(paste0(here::here(), "/clustering/MOVICS/movics_cluster_res_list_08032023.rds"))
+cluster_res_list1 <- read_rds(paste0(here::here(), "/clustering/MOVICS/movics_cluster_res_list1_04112024.rds"))
+
+L1_imputed <- read_rds(paste0(here::here(), "/L1_imputed.rds"))
+Alu_imputed <- read_rds(paste0(here::here(), "/Alu_imputed.rds"))
+ERV_imputed <- read_rds(paste0(here::here(), "/ERV_imputed.rds"))
+
+BRCA_mutations <- read_csv(paste0(here::here(), "/ancestry_and_mutation_3_12_24.csv"))
+patient_id <- read_csv(paste0(here::here(), "/Patient ids  for BRCA and TP53 data request.csv"))
+
+survival_time_Nov2023 <- read_csv(paste0(here::here(), "/survival_time_Nov2023_2024-06-19.csv")) %>% 
+  mutate(suid = as.character(suid))
+```
+
+
+```{r extract clusters}
+coca_cluster_results <- cluster_res_list$COCA$clust.res %>%
+  remove_rownames() %>% 
+  mutate(patient_id = str_remove(samID, "X")) %>% 
+  select(-samID, coca_RE_cluster = clust)
+
+nemo_cluster_results <- cluster_res_list$NEMO$clust.res %>%
+  remove_rownames() %>% 
+  mutate(patient_id = str_remove(samID, "X")) %>% 
+  select(-samID, nemo_cluster_results = clust)
+
+cc_cluster_results <- cluster_res_list$ConsensusClustering$clust.res %>%
+  remove_rownames() %>% 
+  mutate(patient_id = str_remove(samID, "X")) %>% 
+  select(-samID, cc_cluster_results = clust)
+
+intnmf_cluster_results <- cluster_res_list$IntNMF$clust.res %>%
+  remove_rownames() %>% 
+  mutate(patient_id = str_remove(samID, "X")) %>% 
+  select(-samID, intnmf_cluster_results = clust)
+
+moc_cluster_results <- cluster_res_list$MoCluster$clust.res %>%
+  remove_rownames() %>% 
+  mutate(patient_id = str_remove(samID, "X")) %>% 
+  select(-samID, moc_cluster_results = clust)
+
+ibayes_cluster_results <- cluster_res_list$iClusterBayes$clust.res %>%
+  remove_rownames() %>% 
+  mutate(patient_id = str_remove(samID, "X")) %>% 
+  select(-samID, ibayes_cluster_results = clust)
+
+bcc_cluster_results <- cluster_res_list1$BCC$clust.res %>%
+  remove_rownames() %>% 
+  mutate(patient_id = str_remove(samID, "X")) %>%
+              mutate(clust = case_when(
+                clust == 1 ~ 2,
+                clust == 2 ~ 1
+              )) %>% 
+  select(-samID, bcc_cluster_results = clust)
+```
+
+
+```{r cleaning}
+phenoclean <- phenoclean %>%
+  select(-c(starts_with("chr"))) %>%
+  remove_rownames() %>%
+  mutate(suid = Sample_Name) %>%
+  select(patient_id = Complete.Barcode, suid, everything(), -c(Sample_Name, roi_num : Basename))
+
+phenoclean <- phenoclean %>%
+  mutate(bmi_cat = case_when(
+    BMI_recent < 25                                         ~ "<25",
+    BMI_recent >= 25 &
+      BMI_recent < 30                                       ~ "25-29",
+    BMI_recent >= 30 &
+      BMI_recent < 35                                       ~ "30-34",
+    BMI_recent >= 35                                        ~ "≥35"
+  ), bmi_cat =
+    factor(bmi_cat, levels = c("<25", "25-29", "30-34", "≥35"))) %>%
+  mutate(bmi_cat2 = case_when(
+    BMI_recent < 30                                         ~ "<30",
+    BMI_recent >= 30                                        ~ "≥30"
+  ), bmi_cat2 =
+    factor(bmi_cat2, levels = c("<30", "≥30"))) %>%
+  mutate(stage_cat = case_when(
+    stage == "Distant"              ~ "Late",
+    stage == "Localized"            ~ "Early",
+    stage == "Regional"             ~ "Early"
+  ), stage_cat = factor(stage_cat, levels = c("Early", "Late"))
+  ) %>% 
+  mutate(smoking_status = case_when(
+    str_detect(smokcurrent, "current|former") ~ "Ever",
+    smokcurrent == "never smoker"             ~ "Never"
+  )) %>% 
+  # Rename older vital status but keep in data
+  rename(vitalstatus_2022 = vitalstatus,
+         timelastfu_2022 = timelastfu) %>% 
+  # Create survival var
+  left_join(., survival_time_Nov2023, by = "suid") %>% 
+  mutate(vitalstatus = case_when(
+    os_event == 0                            ~ "Alive",
+    os_event == 1                            ~ "Deceased",
+    TRUE                                     ~ NA_character_
+  )) %>% 
+  mutate(os_time_5year = case_when(
+    os_time_months <= 5 * 12      ~ os_time_months,
+    os_time_months > 5 * 12       ~ 60,
+    TRUE                                                       ~ NA_real_
+  )) %>% 
+  mutate(os_event_5year = case_when(
+    os_time_months <= 60        ~ os_event,
+    os_time_months > 60         ~ 0,
+    TRUE                        ~ NA_real_
+  ))
+
+```
+
+```{r BRCA cleaning}
+BRCA_mutations <- BRCA_mutations %>% 
+  full_join(patient_id, ., by = "suid") %>% 
+  mutate(across(c(where(is.character), -Complete.Barcode), ~ str_to_lower(.))) %>% 
+  mutate(suid = as.character(suid)) %>% 
+  mutate_at(c("germline_mutation_BRCA1", "germline_mutation_BRCA2", 
+              "tumor_mutation_BRCA1", "tumor_mutation_BRCA2",
+              "germline_mutation_TP53", "tumor_mutation_TP53"), 
+            ~ case_when(
+              . == 1                                         ~ "Yes",
+              . == 2                                         ~ "No",
+              TRUE                                           ~ as.character(.)
+            )
+  ) %>% 
+  mutate(BRCA1_carrier = case_when(
+    tumor_mutation_BRCA1 == "Yes" |
+      germline_mutation_BRCA1 == "Yes"                       ~ "Yes",
+    tumor_mutation_BRCA1 == "No" &
+      germline_mutation_BRCA1 == "No"                        ~ "No"
+  )) %>% 
+  mutate(BRCA2_carrier = case_when(
+    tumor_mutation_BRCA2 == "Yes" |
+      germline_mutation_BRCA2 == "Yes"                       ~ "Yes",
+    tumor_mutation_BRCA2 == "No" &
+      germline_mutation_BRCA2 == "No"                        ~ "No"
+  )) %>% 
+  mutate(pathogenic_germline_BRCA1 = case_when(
+    germline_mutation_BRCA1 == "Yes" &
+      str_detect(germline_clinvar_BRCA1, "pathogenic")                 ~ "Yes",
+    germline_mutation_BRCA1 == "Yes" &
+      !str_detect(germline_clinvar_BRCA1, "pathogenic")                 ~ "No",
+    germline_mutation_BRCA1 == "No"                          ~ "No"
+  )) %>% 
+  mutate(pathogenic_germline_BRCA2 = case_when(
+    germline_mutation_BRCA2 == "Yes" &
+      str_detect(germline_clinvar_BRCA2, "pathogenic")                 ~ "Yes",
+    germline_mutation_BRCA2 == "Yes" &
+      !str_detect(germline_clinvar_BRCA2, "pathogenic")                 ~ "No",
+    germline_mutation_BRCA2 == "No"                          ~ "No"
+  )) %>% 
+  mutate(pathogenic_tumor_BRCA1 = case_when(
+    tumor_mutation_BRCA1 == "Yes" &
+      str_detect(tumor_clinvar_BRCA1, "pathogenic")                    ~ "Yes",
+    tumor_mutation_BRCA1 == "Yes" &
+      !str_detect(tumor_clinvar_BRCA1, "pathogenic")                    ~ "No",
+    tumor_mutation_BRCA1 == "No"                             ~ "No"
+  )) %>% 
+  mutate(pathogenic_tumor_BRCA2 = case_when(
+    tumor_mutation_BRCA2 == "Yes" &
+      str_detect(tumor_clinvar_BRCA2, "pathogenic")                    ~ "Yes",
+    tumor_mutation_BRCA2 == "Yes" &
+      !str_detect(tumor_clinvar_BRCA2, "pathogenic")                    ~ "No",
+    tumor_mutation_BRCA2 == "No"                             ~ "No"
+  )) %>% 
+  mutate(pathogenic_germline_TP53 = case_when(
+    germline_mutation_TP53 == "Yes" &
+      str_detect(germline_clinvar_TP53, "pathogenic")        ~ "Yes",
+    germline_mutation_TP53 == "Yes" &
+      !str_detect(germline_clinvar_TP53, "pathogenic")       ~ "No",
+    germline_mutation_TP53 == "No"                           ~ "No"
+  )) %>% 
+  mutate(pathogenic_tumor_TP53 = case_when(
+    tumor_mutation_TP53 == "Yes" &
+      str_detect(tumor_clinvar_TP53, "pathogenic")           ~ "Yes",
+    tumor_mutation_TP53 == "Yes" &
+      !str_detect(tumor_clinvar_TP53, "pathogenic")          ~ "No",
+    tumor_mutation_TP53 == "No"                              ~ "No"
+  )) %>%
+  # mutate(germline_BRCA12 = case_when(
+  #   germline_mutation_BRCA1 == "Yes" |
+  #     germline_mutation_BRCA2 == "Yes"                       ~ "No",
+  #   germline_mutation_BRCA1 == "No" &
+  #     germline_mutation_BRCA2 == "No"                        ~ "No"
+  # )) %>% 
+  # mutate(tumor_BRCA12 = case_when(
+  #   tumor_mutation_BRCA1 == "Yes" |
+  #     tumor_mutation_BRCA2 == "Yes"                          ~ "No",
+  #   tumor_mutation_BRCA1 == "No" &
+  #     tumor_mutation_BRCA2 == "No"                           ~ "No"
+  # )) %>% 
+  mutate_at(c("germline_mutation_BRCA1", "germline_mutation_BRCA2", 
+              "tumor_mutation_BRCA1", "tumor_mutation_BRCA2",
+              "germline_mutation_TP53", "tumor_mutation_TP53",
+              "pathogenic_germline_BRCA1", "pathogenic_germline_BRCA2",
+              "pathogenic_tumor_BRCA1", "pathogenic_tumor_BRCA2",
+              "pathogenic_germline_TP53", "pathogenic_tumor_TP53",
+              "BRCA1_carrier", "BRCA2_carrier"),
+            ~ factor(., levels = c("No",
+                                   "Yes")))
+```
+
+```{r prep data}
+met_data <- phenoclean %>% 
+  inner_join(., coca_cluster_results,
+            by = "patient_id") %>% 
+  inner_join(., nemo_cluster_results,
+            by = "patient_id") %>% 
+  inner_join(., cc_cluster_results,
+            by = "patient_id") %>% 
+  inner_join(., intnmf_cluster_results,
+            by = "patient_id") %>% 
+  inner_join(., moc_cluster_results,
+            by = "patient_id") %>% 
+  inner_join(., ibayes_cluster_results,
+            by = "patient_id") %>% 
+  inner_join(., bcc_cluster_results,
+            by = "patient_id") %>% 
+  left_join(., BRCA_mutations, 
+            by = c("patient_id" = "Complete.Barcode", "suid")) %>% 
+  mutate(across(c(where(is.character), -patient_id), ~ str_to_sentence(.))) %>% 
+  mutate(coca_RE_cluster = as.character(coca_RE_cluster)) %>% 
+  mutate(nemo_cluster_results = as.character(nemo_cluster_results)) %>% 
+  mutate(cc_cluster_results = as.character(cc_cluster_results)) %>% 
+  mutate(intnmf_cluster_results = as.character(intnmf_cluster_results)) %>% 
+  mutate(moc_cluster_results = as.character(moc_cluster_results)) %>% 
+  mutate(ibayes_cluster_results = as.character(ibayes_cluster_results)) %>% 
+  mutate(bcc_cluster_results = as.character(bcc_cluster_results))
+
+write_rds(met_data, "met_data_addedcluster.rds")
+```
+
+```{r Labeling}
+var_label(met_data) <- list(refage = "Age at diagnosis",
+                            stage_cat = "Stage",
+                            debulking_CA125 = "Debulking Status", 
+                            neoadjuvant = "Neoadjuvant chemotherapy",
+                            adjuvant = "Adjuvant chemotherapy",
+                            smokcurrent = "Current smoking status",
+                            germline_mutation_BRCA1 = "BRCA1 germline carrier", 
+                            germline_mutation_BRCA2 = "BRCA2 germline carrier", 
+                            tumor_mutation_BRCA1 = "BRCA1 tumor carrier", 
+                            tumor_mutation_BRCA2 = "BRCA2 tumor carrier",
+                            germline_mutation_TP53 = "TP53 germline carrier", 
+                            tumor_mutation_TP53 = "TP53 tumor carrier",
+                            pathogenic_germline_BRCA1 = "pathogenic BRCA1 germline carrier", 
+                            pathogenic_germline_BRCA2 = "pathogenic BRCA2 germline carrier",
+                            pathogenic_tumor_BRCA1 = "pathogenic BRCA1 tumor carrier", 
+                            pathogenic_tumor_BRCA2 = "pathogenic BRCA2 tumor carrier",
+                            pathogenic_germline_TP53 = "pathogenic TP53 germline carrier", 
+                            pathogenic_tumor_TP53 = "pathogenic TP53 tumor carrier"#,
+                            # coca_RE_cluster = "COCA cluster"
+                            )
+```
+
+# III. Adjusted hazard ratios and 95% confidence intervals
+
+## 1. Adjusted hazard ratios and 95% confidence intervals
+```{r}
+met_data1 <- met_data %>% rename(cluster = coca_RE_cluster)
+tbl_coca <- coxph(Surv(time = met_data1$os_time_5year,
+                   event = met_data1$os_event_5year) ~ cluster + refage + stage_cat,
+              data = met_data1)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data2 <- met_data  %>% rename(cluster = nemo_cluster_results)
+tbl_nemo <- coxph(Surv(time = met_data2$os_time_5year,
+                   event = met_data2$os_event_5year) ~ cluster + refage + stage_cat,
+              data = met_data2)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data3 <- met_data  %>% rename(cluster = cc_cluster_results)
+tbl_cc <- coxph(Surv(time = met_data3$os_time_5year,
+                   event = met_data3$os_event_5year) ~ cluster + refage + stage_cat,
+              data = met_data3)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data4 <- met_data  %>% rename(cluster = intnmf_cluster_results)
+tbl_intnmf <- coxph(Surv(time = met_data4$os_time_5year,
+                   event = met_data4$os_event_5year) ~ cluster + refage + stage_cat,
+              data = met_data4)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data5 <- met_data  %>% rename(cluster = moc_cluster_results)
+tbl_moc <- coxph(Surv(time = met_data5$os_time_5year,
+                   event = met_data5$os_event_5year) ~ cluster + refage + stage_cat,
+              data = met_data5)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data6 <- met_data  %>% rename(cluster = ibayes_cluster_results)
+tbl_ibayes <- coxph(Surv(time = met_data6$os_time_5year,
+                   event = met_data6$os_event_5year) ~ cluster + refage + stage_cat,
+              data = met_data6)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data7 <- met_data  %>% rename(cluster = bcc_cluster_results)
+tbl_bcc <- coxph(Surv(time = met_data7$os_time_5year,
+                   event = met_data7$os_event_5year) ~ cluster + refage + stage_cat,
+              data = met_data7)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl_coca, tbl_nemo, 
+               tbl_cc, tbl_intnmf,
+               tbl_moc, tbl_ibayes, tbl_bcc), 
+          tab_spanner = c("**COCA**", "**NEMO**", 
+                          "**Consensus clustering**", "**IntNMF**",
+                          "**Mocluster**", "**iBayes**", "**BCC**"))
+```
+<br>
+<br>
+
+
+## 2. HR adjusted by debulking status
+```{r}
+met_data1 <- met_data %>% rename(cluster = coca_RE_cluster)
+tbl_coca <- coxph(Surv(time = met_data1$os_time_5year,
+                   event = met_data1$os_event_5year) ~ cluster + refage + stage_cat + debulking_CA125,
+              data = met_data1)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data2 <- met_data  %>% rename(cluster = nemo_cluster_results)
+tbl_nemo <- coxph(Surv(time = met_data2$os_time_5year,
+                   event = met_data2$os_event_5year) ~ cluster + refage + stage_cat + debulking_CA125,
+              data = met_data2)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data3 <- met_data  %>% rename(cluster = cc_cluster_results)
+tbl_cc <- coxph(Surv(time = met_data3$os_time_5year,
+                   event = met_data3$os_event_5year) ~ cluster + refage + stage_cat + debulking_CA125,
+              data = met_data3)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data4 <- met_data  %>% rename(cluster = intnmf_cluster_results)
+tbl_intnmf <- coxph(Surv(time = met_data4$os_time_5year,
+                   event = met_data4$os_event_5year) ~ cluster + refage + stage_cat + debulking_CA125,
+              data = met_data4)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data5 <- met_data  %>% rename(cluster = moc_cluster_results)
+tbl_moc <- coxph(Surv(time = met_data5$os_time_5year,
+                   event = met_data5$os_event_5year) ~ cluster + refage + stage_cat + debulking_CA125,
+              data = met_data5)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data6 <- met_data  %>% rename(cluster = ibayes_cluster_results)
+tbl_ibayes <- coxph(Surv(time = met_data6$os_time_5year,
+                   event = met_data6$os_event_5year) ~ cluster + refage + stage_cat + debulking_CA125,
+              data = met_data6)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+met_data7 <- met_data  %>% rename(cluster = bcc_cluster_results)
+tbl_bcc <- coxph(Surv(time = met_data7$os_time_5year,
+                   event = met_data7$os_event_5year) ~ cluster + refage + stage_cat + debulking_CA125,
+              data = met_data7)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+tbl_merge(list(tbl_coca, tbl_nemo, 
+               tbl_cc, tbl_intnmf,
+               tbl_moc, tbl_ibayes, tbl_bcc), 
+          tab_spanner = c("**COCA**", "**NEMO**", 
+                          "**Consensus clustering**", "**IntNMF**",
+                          "**Mocluster**", "**iBayes**", "**BCC**"))
+```
+
+# KM
+```{r}
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ coca_RE_cluster,
+                   data=met_data),
+           # title = "OS Analysis",
+           font.main = c(16, "bold", "black"),
+           font.x = c(14, "bold", "black"),
+           font.y = c(14, "bold", "black"),
+           font.legend = c(12, "black"),
+           font.tickslab = c(12, "bold", "black"),
+           size = 1,
+           
+           xlab = "Time (months)",
+           ylab = "OS (probability)",
+           legend = "top",
+           # legend.title = "COCA cluster", palette = c("red", "blue"),
+           # legend.labs = c("Active", "Repressed"),
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) %++% guides(colour = guide_legend(ncol = 1))
+
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ nemo_cluster_results,
+                   data=met_data),
+           # title = "OS Analysis",
+           font.main = c(16, "bold", "black"),
+           font.x = c(14, "bold", "black"),
+           font.y = c(14, "bold", "black"),
+           font.legend = c(12, "black"),
+           font.tickslab = c(12, "bold", "black"),
+           size = 1,
+           
+           xlab = "Time (months)",
+           ylab = "OS (probability)",
+           legend = "top",
+           # legend.title = "COCA cluster", palette = c("red", "blue"),
+           # legend.labs = c("Active", "Repressed"),
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) %++% guides(colour = guide_legend(ncol = 1))
+
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ cc_cluster_results,
+                   data=met_data),
+           # title = "OS Analysis",
+           font.main = c(16, "bold", "black"),
+           font.x = c(14, "bold", "black"),
+           font.y = c(14, "bold", "black"),
+           font.legend = c(12, "black"),
+           font.tickslab = c(12, "bold", "black"),
+           size = 1,
+           
+           xlab = "Time (months)",
+           ylab = "OS (probability)",
+           legend = "top",
+           # legend.title = "COCA cluster", palette = c("red", "blue"),
+           # legend.labs = c("Active", "Repressed"),
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) %++% guides(colour = guide_legend(ncol = 1))
+
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ intnmf_cluster_results,
+                   data=met_data),
+           # title = "OS Analysis",
+           font.main = c(16, "bold", "black"),
+           font.x = c(14, "bold", "black"),
+           font.y = c(14, "bold", "black"),
+           font.legend = c(12, "black"),
+           font.tickslab = c(12, "bold", "black"),
+           size = 1,
+           
+           xlab = "Time (months)",
+           ylab = "OS (probability)",
+           legend = "top",
+           # legend.title = "COCA cluster", palette = c("red", "blue"),
+           # legend.labs = c("Active", "Repressed"),
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) %++% guides(colour = guide_legend(ncol = 1))
+
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ moc_cluster_results,
+                   data=met_data),
+           # title = "OS Analysis",
+           font.main = c(16, "bold", "black"),
+           font.x = c(14, "bold", "black"),
+           font.y = c(14, "bold", "black"),
+           font.legend = c(12, "black"),
+           font.tickslab = c(12, "bold", "black"),
+           size = 1,
+           
+           xlab = "Time (months)",
+           ylab = "OS (probability)",
+           legend = "top",
+           # legend.title = "COCA cluster", palette = c("red", "blue"),
+           # legend.labs = c("Active", "Repressed"),
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) %++% guides(colour = guide_legend(ncol = 1))
+
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ ibayes_cluster_results,
+                   data=met_data),
+           # title = "OS Analysis",
+           font.main = c(16, "bold", "black"),
+           font.x = c(14, "bold", "black"),
+           font.y = c(14, "bold", "black"),
+           font.legend = c(12, "black"),
+           font.tickslab = c(12, "bold", "black"),
+           size = 1,
+           
+           xlab = "Time (months)",
+           ylab = "OS (probability)",
+           legend = "top",
+           # legend.title = "COCA cluster", palette = c("red", "blue"),
+           # legend.labs = c("Active", "Repressed"),
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) %++% guides(colour = guide_legend(ncol = 1))
+
+ggsurvplot(survfit(Surv(os_time_5year, os_event_5year) ~ bcc_cluster_results,
+                   data=met_data),
+           # title = "OS Analysis",
+           font.main = c(16, "bold", "black"),
+           font.x = c(14, "bold", "black"),
+           font.y = c(14, "bold", "black"),
+           font.legend = c(12, "black"),
+           font.tickslab = c(12, "bold", "black"),
+           size = 1,
+           
+           xlab = "Time (months)",
+           ylab = "OS (probability)",
+           legend = "top",
+           # legend.title = "COCA cluster", palette = c("red", "blue"),
+           # legend.labs = c("Active", "Repressed"),
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) %++% guides(colour = guide_legend(ncol = 1))
+```
+
+
+
