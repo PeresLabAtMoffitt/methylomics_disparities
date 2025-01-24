@@ -69,6 +69,7 @@ ERV_imputed <- read_rds(paste0(here::here(), "/ERV_imputed.rds"))
 
 BRCA_mutations <- read_csv(paste0(here::here(), "/ancestry_and_mutation_3_12_24.csv"))
 patient_id <- read_csv(paste0(here::here(), "/Patient ids  for BRCA and TP53 data request.csv"))
+failed_qc <- read_csv(paste0(here::here(), "/Patient failed qc brca tp53 mutation.csv"))
 
 survival_time_Nov2023 <- read_csv(paste0(here::here(), "/survival_time_Nov2023_2024-06-19.csv")) %>% 
   mutate(suid = as.character(suid))
@@ -136,6 +137,7 @@ phenoclean <- phenoclean %>%
 ```
 
 ```{r BRCA cleaning}
+failed_qc <- paste0(failed_qc$suid, collapse = "|")
 BRCA_mutations <- BRCA_mutations %>% 
   full_join(patient_id, ., by = "suid") %>% 
   mutate(across(c(where(is.character), -Complete.Barcode), ~ str_to_lower(.))) %>% 
@@ -147,6 +149,14 @@ BRCA_mutations <- BRCA_mutations %>%
               . == 1                                         ~ "Yes",
               . == 2                                         ~ "No",
               TRUE                                           ~ as.character(.)
+            )
+  ) %>% 
+  mutate_at(c("germline_mutation_BRCA1", "germline_mutation_BRCA2", 
+              "tumor_mutation_BRCA1", "tumor_mutation_BRCA2",
+              "germline_mutation_TP53", "tumor_mutation_TP53"), 
+            ~ case_when(
+              str_detect(suid, failed_qc)                    ~ NA_character_,
+              TRUE                                           ~ .
             )
   ) %>% 
   mutate(BRCA1_carrier = case_when(
@@ -235,7 +245,7 @@ met_data <- phenoclean %>%
   mutate(across(c(where(is.character), -patient_id), ~ str_to_sentence(.))) %>% 
   mutate(coca_RE_cluster = as.character(coca_RE_cluster))
 
-write_rds(met_data, "met_data.rds")
+write_rds(met_data, "met_data_01-23-2025.rds")
 ```
 
 ```{r Labeling}

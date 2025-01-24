@@ -46,8 +46,12 @@ getMoHeatmap <- function(data             = NULL,
   if(!is.null(annCol) & !is.null(annColors)) {
     
     annCol <- annCol[colnames(data[[1]]), , drop = FALSE]
-    annCol$COCA <- paste0("CS",clust.res[colnames(data[[1]]),"clust"]) # Change name here----
-    annColors[["COCA"]] <- colvec # Change name here----
+    annCol$Cluster <- paste0(#"CS",
+                          clust.res[colnames(data[[1]]),"clust"]) # Change name here----
+    annColors[["Cluster"]] <- colvec # Change name here----
+    
+    # names(annCol) <- names(annCol) %>% str_replace(., "_", " ") # For BRCA legend name
+    # names(annColors) <- names(annColors) %>% str_replace(., "_", " ")
     
     if(is.null(clust.dend)) {
       clust.res <- clust.res[order(clust.res$clust),]
@@ -58,11 +62,11 @@ getMoHeatmap <- function(data             = NULL,
                                             col    = annColors,
                                             border = FALSE)
   } else {
-    annCol <- data.frame("iClusterBayes" = paste0(# "CS",
+    annCol <- data.frame("Cluster" = paste0(# "CS",
                                          clust.res[colnames(data[[1]]),"clust"]), # Change name here----
                          row.names = colnames(data[[1]]),
                          stringsAsFactors = FALSE)
-    annColors <- list("iClusterBayes" = colvec) # Change name here----
+    annColors <- list("Cluster" = colvec) # Change name here----
     
     if(is.null(clust.dend)) {
       clust.res <- clust.res[order(clust.res$clust),]
@@ -99,8 +103,21 @@ getMoHeatmap <- function(data             = NULL,
       
       if(!is.binary[i]) {
         print(ha)
-        ha@anno_list[["iClusterBayes"]]@show_legend <- FALSE # Remove legend of main cluster - need update name of cluster
-        
+        # ha <- ha %>% ha@anno_list[["iClusterBayes"]]
+        # ha@anno_list[["iClusterBayes"]]@name_param[["show"]] <- FALSE # Remove name on the left of bar
+        ha@anno_list[["iClusterBayes"]]@show_legend <- FALSE
+        ha@anno_list[["MoCluster"]]@show_legend <- FALSE
+        ha@anno_list[["ConsensusClustering"]]@show_legend <- FALSE
+        ha@anno_list[["IntNMF"]]@show_legend <- FALSE
+        ha@anno_list[["NEMO"]]@show_legend <- FALSE
+        ha@anno_list[["BCC"]]@show_legend <- FALSE
+        # ha@anno_list[["COCA"]]@name_param[["label"]] = "Cluster"
+        ha@anno_list[["Cluster"]]@label <- "COCA"
+        # ha@anno_list[["COCA"]]@name <- "B1"
+        # ha@anno_list[["COCA"]]@name_param[["label"]] <- "Cluster"
+        # ha@anno_list[["COCA"]]@show_legend <- FALSE
+        # print(rowlab.index)
+        print(ha)
         ht[[i]] <-  ComplexHeatmap::Heatmap(matrix               = as.matrix(data[[i]]),
                                             row_title            = row.title[i],
                                             name                 = legend.name[i],
@@ -116,7 +133,6 @@ getMoHeatmap <- function(data             = NULL,
                                             height               = grid::unit(height, "cm"),
                                             heatmap_legend_param = list(at     = pretty(range(data[[i]])),
                                                                         labels = pretty(range(data[[i]]))),
-                                            # show_heatmap_legend = FALSE, # Remove L1, Alu, LTR legends if FALSE
                                             right_annotation     = ComplexHeatmap::rowAnnotation(link =
                                                                                                    anno_mark(at         = rowlab.index,
                                                                                                              labels     = rowlab,

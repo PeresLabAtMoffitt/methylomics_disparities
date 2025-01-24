@@ -353,9 +353,9 @@ getMoHeatmap(data          = plot_cluster,
 library(tidyverse)
 # library(MOVICS)
 library(ComplexHeatmap)
-source("R/getMoHeatmap_updated_MOVICSfunc.R") # Need to change the name of each cluster in the function
+source("R/BRCA_getMoHeatmap_MOVICSfunc.R")
 theme_set(theme_classic())
-met_data <- read_rds(paste0(here::here(), "/met_data.rds"))
+met_data <- read_rds(paste0(here::here(), "/met_data_01-23-2025.rds"))
 cluster_res_list1 <- read_rds(paste0(here::here(), "/clustering/MOVICS/movics_cluster_res_list1_04112024.rds"))
 plot_cluster <- read_rds(paste0(here::here(), "/plot_cluster.rds"))
 # plot_cluster <- read_rds(paste0(here::here(), "/plot_cluster5000.rds"))
@@ -387,13 +387,14 @@ annCol <- annCol %>%
   column_to_rownames("patient_id") %>% 
   filter(BRCA1_carrier != "Unknown" |
            BRCA2_carrier != "Unknown") %>% 
-  mutate(BRCA1_carrier = factor(BRCA1_carrier, levels = c("No", "Yes", "Unknown"))) %>% 
-  mutate(BRCA2_carrier = factor(BRCA2_carrier, levels = c("No", "Yes", "Unknown")))
+  mutate(`BRCA1 mutation` = factor(BRCA1_carrier, levels = c("No", "Yes", "Unknown"))) %>% 
+  mutate(`BRCA2 mutation` = factor(BRCA2_carrier, levels = c("No", "Yes", "Unknown"))) %>% 
+  select(-BRCA1_carrier, -BRCA2_carrier)
 
-annColors <- list(BRCA1_carrier  = c("Yes" = "purple",
+annColors <- list(`BRCA1 mutation`  = c("Yes" = "purple",
                                                "No"   = "lightgrey",
                                                "Unknown"   = "black"),
-                  BRCA2_carrier  = c("Yes" = "purple",
+                  `BRCA2 mutation`  = c("Yes" = "purple",
                                             "No"   = "lightgrey",
                                             "Unknown"   = "black")
 )
@@ -411,7 +412,7 @@ getMoHeatmap(data          = plot_cluster,
              height        = 5, 
              annCol        = annCol, # annotation for samples
              annColors     = annColors, # annotation color
-             fig.name      = "heatmaps/Heatmap of COCA_with_limited_BRCA_10022024"
+             fig.name      = "heatmaps/redo Heatmap of COCA_with_limited_BRCA_01232025"
              )
 
 # # BRCA 1 and 2 - overall/germline/tumor
@@ -662,7 +663,7 @@ library(survival)
 library(survminer)
 library(patchwork)
 theme_set(theme_classic())
-met_data <- read_rds(paste0(here::here(), "/met_data.rds"))
+met_data <- read_rds(paste0(here::here(), "/met_data_01-23-2025.rds"))
 
 
 
@@ -1175,7 +1176,7 @@ plot
 library(tidyverse)
 library(survival)
 theme_set(theme_classic())
-met_data <- read_rds(paste0(here::here(), "/met_data.rds"))
+met_data <- read_rds(paste0(here::here(), "/met_data_01-23-2025.rds"))
 # forest_p <- coxph(Surv(time = met_data$os_time_5year,
 #                        event = met_data$os_event_5year) ~ coca_RE_cluster + refage + stage_cat + 
 #                     BRCA1_carrier + BRCA2_carrier,
@@ -1198,7 +1199,7 @@ forest_p <- tibble::tribble(
   ~Characteristic, ~`N.(Deaths)`,      ~`HR.(95%.CI)`, ~`p-value`, 
   "Model 1",   "175 (105)", "2.01 (1.01, 3.98)",      0.045,    
   "Model 2",   "125 (75)", "2.41 (1.04, 5.59)",       0.04,
-  "Model 4",   "135 (83)", "2.91 (1.17, 7.20)",      0.021,
+  "Model 4",   "132 (80)", "2.83 (1.14, 7.03)",      0.025, # BRCA
   "Model 3",   "101 (69)", "2.87 (1.15, 7.16)",      0.024 # restricted to early stage
   ) %>% 
   separate_wider_delim(cols = `HR.(95%.CI)`, delim = " (",
@@ -1236,7 +1237,7 @@ forest_p <- ggplot(data = forest_p,
   labs(x = "HR (95% CI)", y = ""#, caption = "Model 3 = Adjusting for BRCA1 and BRCA2 mutations"
        )
 forest_p
-ggsave("Figure forest plot_10032024.pdf",
+ggsave("Figure forest plot_01232025.pdf",
        width = 7,
        height = 4, 
        dpi = 600)
@@ -1288,7 +1289,7 @@ library(patchwork)
               widths = c(3, 3.5)
               )
 
-ggsave("Figure 2 KM forest plot_10032024.pdf", device = cairo_pdf,
+ggsave("Figure 2 KM forest plot_01232025.pdf", device = cairo_pdf,
        path = here::here(),
        width = 11, height = 5,
        units = c("in"),

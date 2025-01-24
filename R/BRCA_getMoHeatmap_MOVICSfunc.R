@@ -1,5 +1,3 @@
-
-
 getMoHeatmap <- function(data             = NULL,
                          is.binary        = c(FALSE, FALSE, FALSE, FALSE, FALSE, FALSE),
                          row.title        = c("Data1","Data2","Data3","Data4","Data5","Data6"),
@@ -12,7 +10,7 @@ getMoHeatmap <- function(data             = NULL,
                          show.rownames    = c(FALSE, FALSE, FALSE, FALSE, FALSE, FALSE),
                          clust.dist.row   = c("pearson","pearson","pearson","pearson","pearson","pearson"),
                          clust.method.row = c("ward.D","ward.D","ward.D","ward.D","ward.D","ward.D"),
-                         clust.col        = c("red","blue","#FF9F1C","#BDD5EA","#FFA5AB","#011627","#023E8A","#9D4EDD"),
+                         clust.col        = c("red","blue","#FF9F1C","#BDD5EA","#FFA5AB","#011627","#023E8A","#9D4EDD"), # make it "red","blue"
                          color            = rep(list(c("#00FF00", "#000000", "#FF0000")),length(data)),
                          annCol           = NULL,
                          annColors        = NULL,
@@ -46,8 +44,9 @@ getMoHeatmap <- function(data             = NULL,
   if(!is.null(annCol) & !is.null(annColors)) {
     
     annCol <- annCol[colnames(data[[1]]), , drop = FALSE]
-    annCol$COCA <- paste0("CS",clust.res[colnames(data[[1]]),"clust"]) # Change name here----
-    annColors[["COCA"]] <- colvec # Change name here----
+    annCol$COCA <- paste0(#"CS",
+                          clust.res[colnames(data[[1]]),"clust"]) # Change name here----
+    annColors[["COCA"]] <- colvec # # Change name here----
     
     if(is.null(clust.dend)) {
       clust.res <- clust.res[order(clust.res$clust),]
@@ -58,11 +57,10 @@ getMoHeatmap <- function(data             = NULL,
                                             col    = annColors,
                                             border = FALSE)
   } else {
-    annCol <- data.frame("iClusterBayes" = paste0(# "CS",
-                                         clust.res[colnames(data[[1]]),"clust"]), # Change name here----
+    annCol <- data.frame("Subtype" = paste0("CS",clust.res[colnames(data[[1]]),"clust"]),
                          row.names = colnames(data[[1]]),
                          stringsAsFactors = FALSE)
-    annColors <- list("iClusterBayes" = colvec) # Change name here----
+    annColors <- list("Subtype" = colvec)
     
     if(is.null(clust.dend)) {
       clust.res <- clust.res[order(clust.res$clust),]
@@ -99,7 +97,7 @@ getMoHeatmap <- function(data             = NULL,
       
       if(!is.binary[i]) {
         print(ha)
-        ha@anno_list[["iClusterBayes"]]@show_legend <- FALSE # Remove legend of main cluster - need update name of cluster
+        # ha@anno_list[["COCA"]]@show_legend <- FALSE # Remove legend of main cluster - need update name of cluster
         
         ht[[i]] <-  ComplexHeatmap::Heatmap(matrix               = as.matrix(data[[i]]),
                                             row_title            = row.title[i],
